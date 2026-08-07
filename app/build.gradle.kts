@@ -10,20 +10,28 @@ plugins {
 }
 
 android {
-    namespace = "com.syktox.fitns"
+    val androidSigningEnv = loadAndroidSigningEnv(rootProject.file(".env.android-signing"))
+    val localProps = loadLocalProperties(rootProject.file("local.properties"))
+
+    namespace = "com.raysix.fitns"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.syktox.fitns"
+        applicationId = "com.raysix.fitns"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
 
+        buildConfigField(
+            "String",
+            "GOOGLE_WEB_CLIENT_ID",
+            "\"${localProps["GOOGLE_WEB_CLIENT_ID"].orEmpty()}\""
+        )
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    val androidSigningEnv = loadAndroidSigningEnv(rootProject.file(".env.android-signing"))
     fun signingValue(name: String): String? = System.getenv(name) ?: androidSigningEnv[name]
     val releaseKeystoreBase64 = signingValue("ANDROID_KEYSTORE_BASE64")
     val releaseKeystorePassword = signingValue("ANDROID_KEYSTORE_PASSWORD")
@@ -78,6 +86,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {
@@ -136,6 +145,7 @@ dependencies {
     implementation("androidx.camera:camera-view:1.4.0")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
@@ -154,6 +164,18 @@ dependencies {
 }
 
 fun loadAndroidSigningEnv(file: File): Map<String, String> {
+    if (!file.exists()) return emptyMap()
+    return file.readLines()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains("=") }
+        .associate { line ->
+            val key = line.substringBefore("=").trim()
+            val value = line.substringAfter("=").trim().trim('"').trim('\'')
+            key to value
+        }
+}
+
+fun loadLocalProperties(file: File): Map<String, String> {
     if (!file.exists()) return emptyMap()
     return file.readLines()
         .map { it.trim() }
