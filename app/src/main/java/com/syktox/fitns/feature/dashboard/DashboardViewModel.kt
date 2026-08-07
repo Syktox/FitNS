@@ -4,10 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.syktox.fitns.core.model.AppResult
 import com.syktox.fitns.domain.model.DailyNutritionDashboard
+import com.syktox.fitns.domain.model.NutrientAggregate
 import com.syktox.fitns.domain.model.NutritionFacts
 import com.syktox.fitns.domain.model.NutritionGoal
 import com.syktox.fitns.domain.repository.NutritionRepository
+import com.syktox.fitns.domain.repository.ProfileRepository
 import com.syktox.fitns.domain.repository.WorkoutRepository
+import com.syktox.fitns.domain.usecase.NutrientAggregator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,6 +29,7 @@ data class DashboardUiState(
     val readiness: DashboardReadiness = DashboardReadiness(),
     val coach: DashboardCoach = EmptyCoach,
     val mealBreakdown: List<MealBreakdown> = emptyList(),
+    val micronutrients: List<NutrientAggregate> = emptyList(),
     val message: String? = null
 )
 
@@ -95,15 +99,18 @@ private val EmptyDashboard = DailyNutritionDashboard(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val nutritionRepository: NutritionRepository,
-    workoutRepository: WorkoutRepository
+    workoutRepository: WorkoutRepository,
+    profileRepository: ProfileRepository,
+    aggregator: NutrientAggregator
 ) : ViewModel() {
     private val message = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<DashboardUiState> = combine(
         nutritionRepository.observeToday(),
         workoutRepository.observeHistory(),
+        profileRepository.observeNutrientTargets(),
         message
-    ) { dashboard, workouts, message ->
+    ) { dashboard, workouts, targets, message ->
         val workoutSummary = workouts.todaySummary()
         DashboardUiState(
             dashboard = dashboard,
@@ -111,6 +118,9 @@ class DashboardViewModel @Inject constructor(
             readiness = workouts.toReadiness(),
             coach = dashboard.toCoach(workoutSummary),
             mealBreakdown = dashboard.toMealBreakdown(),
+            micronutrients = aggregator.aggregate(dashboard.entries, targets)
+                .filter { it.hasData && it.hasTarget }
+                .sortedWith(compareBy<NutrientAggregate> { it.percent }.thenBy { it.key.label }),
             message = message
         )
     }

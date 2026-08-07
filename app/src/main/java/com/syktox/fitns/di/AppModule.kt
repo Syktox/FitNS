@@ -2,11 +2,11 @@ package com.syktox.fitns.di
 
 import android.content.Context
 import androidx.room.Room
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.syktox.fitns.core.network.N8nApiService
 import com.syktox.fitns.core.settings.DefaultN8nBaseUrl
 import com.syktox.fitns.data.local.FitNsDatabase
+import com.syktox.fitns.data.local.Migration1To2
+import com.syktox.fitns.data.local.Migration2To3
 import com.syktox.fitns.data.local.dao.BodyWeightDao
 import com.syktox.fitns.data.local.dao.FoodDao
 import com.syktox.fitns.data.local.dao.ProfileDao
@@ -49,48 +49,8 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FitNsDatabase {
         return Room.databaseBuilder(context, FitNsDatabase::class.java, "fitns.db")
-            .addMigrations(Migration1To2)
+            .addMigrations(Migration1To2, Migration2To3)
             .build()
-    }
-
-    private val Migration1To2 = object : Migration(1, 2) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS workout_plans (
-                    id TEXT NOT NULL PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    focus TEXT NOT NULL,
-                    estimatedMinutes INTEGER NOT NULL,
-                    createdAt INTEGER NOT NULL,
-                    updatedAt INTEGER NOT NULL,
-                    deletedAt INTEGER,
-                    syncStatus TEXT NOT NULL,
-                    serverVersion INTEGER
-                )
-                """.trimIndent()
-            )
-            db.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS workout_plan_exercises (
-                    id TEXT NOT NULL PRIMARY KEY,
-                    planId TEXT NOT NULL,
-                    exerciseId TEXT NOT NULL,
-                    sortOrder INTEGER NOT NULL,
-                    targetSets INTEGER NOT NULL,
-                    targetRepMin INTEGER NOT NULL,
-                    targetRepMax INTEGER NOT NULL,
-                    restSeconds INTEGER NOT NULL,
-                    notes TEXT NOT NULL,
-                    createdAt INTEGER NOT NULL,
-                    updatedAt INTEGER NOT NULL,
-                    deletedAt INTEGER,
-                    syncStatus TEXT NOT NULL,
-                    serverVersion INTEGER
-                )
-                """.trimIndent()
-            )
-        }
     }
 
     @Provides

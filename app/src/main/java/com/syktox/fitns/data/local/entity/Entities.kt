@@ -1,6 +1,7 @@
 package com.syktox.fitns.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class SyncStatus {
@@ -31,7 +32,10 @@ data class UserProfileEntity(
     val serverVersion: Long?
 )
 
-@Entity(tableName = "nutrition_goals")
+@Entity(
+    tableName = "nutrition_goals",
+    indices = [Index(value = ["userProfileId", "validFrom"])]
+)
 data class NutritionGoalEntity(
     @PrimaryKey val id: String,
     val userProfileId: String,
@@ -42,6 +46,27 @@ data class NutritionGoalEntity(
     val fiberGrams: Double,
     val waterMilliliters: Double,
     val validFrom: Long,
+    val validTo: Long? = null,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val deletedAt: Long?,
+    val syncStatus: SyncStatus,
+    val serverVersion: Long?
+)
+
+@Entity(
+    tableName = "nutrient_targets",
+    indices = [Index(value = ["userProfileId"])]
+)
+data class NutrientTargetEntity(
+    @PrimaryKey val id: String,
+    val userProfileId: String,
+    val nutrientKey: String,
+    val targetAmount: Double,
+    val unit: String,
+    val source: String,
+    val validFrom: Long,
+    val validTo: Long? = null,
     val createdAt: Long,
     val updatedAt: Long,
     val deletedAt: Long?,
@@ -109,6 +134,7 @@ data class FoodEntryEntity(
     val fiberGrams: Double,
     val saltGrams: Double,
     val sodiumMilligrams: Double?,
+    val micronutrientsJson: String? = null,
     val consumedAt: Long,
     val notes: String,
     val dataQuality: String,

@@ -4,6 +4,7 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import com.syktox.fitns.core.serialization.MicronutrientsCodec
 import com.syktox.fitns.data.local.dao.BodyWeightDao
 import com.syktox.fitns.data.local.dao.FoodDao
 import com.syktox.fitns.data.local.dao.ProfileDao
@@ -22,6 +23,7 @@ import com.syktox.fitns.data.local.entity.MachineEntity
 import com.syktox.fitns.data.local.entity.MachineSettingEntity
 import com.syktox.fitns.data.local.entity.MealEntity
 import com.syktox.fitns.data.local.entity.NutrientEntity
+import com.syktox.fitns.data.local.entity.NutrientTargetEntity
 import com.syktox.fitns.data.local.entity.NutritionGoalEntity
 import com.syktox.fitns.data.local.entity.RecommendationEntity
 import com.syktox.fitns.data.local.entity.SyncQueueItemEntity
@@ -32,6 +34,7 @@ import com.syktox.fitns.data.local.entity.WorkoutExerciseEntity
 import com.syktox.fitns.data.local.entity.WorkoutPlanEntity
 import com.syktox.fitns.data.local.entity.WorkoutPlanExerciseEntity
 import com.syktox.fitns.data.local.entity.WorkoutSetEntity
+import com.syktox.fitns.domain.model.Micronutrients
 
 @Database(
     entities = [
@@ -43,6 +46,7 @@ import com.syktox.fitns.data.local.entity.WorkoutSetEntity
         MealEntity::class,
         NutrientEntity::class,
         FoodNutrientEntity::class,
+        NutrientTargetEntity::class,
         DailyNutritionSummaryEntity::class,
         ExerciseEntity::class,
         MachineEntity::class,
@@ -58,7 +62,7 @@ import com.syktox.fitns.data.local.entity.WorkoutSetEntity
         ImageAnalysisResultEntity::class,
         BarcodeScanResultEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(FitNsTypeConverters::class)
@@ -76,4 +80,11 @@ class FitNsTypeConverters {
 
     @TypeConverter
     fun stringToSyncStatus(value: String): SyncStatus = SyncStatus.valueOf(value)
+
+    @TypeConverter
+    fun micronutrientsToString(value: Micronutrients): String? = MicronutrientsCodec.encode(value)
+
+    @TypeConverter
+    fun stringToMicronutrients(value: String?): Micronutrients = MicronutrientsCodec.decode(value)
 }
+

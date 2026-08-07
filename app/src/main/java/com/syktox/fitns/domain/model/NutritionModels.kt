@@ -37,7 +37,8 @@ data class FoodLogEntry(
     val nutrition: NutritionFacts,
     val dataQuality: DataQuality = DataQuality.Verified,
     val notes: String = "",
-    val consumedAt: Long = System.currentTimeMillis()
+    val consumedAt: Long = System.currentTimeMillis(),
+    val micronutrients: Micronutrients = Micronutrients()
 )
 
 data class FoodProductLookup(
@@ -64,6 +65,11 @@ data class NutritionGoal(
     val fatGrams: Double,
     val fiberGrams: Double,
     val waterMilliliters: Double
+)
+
+data class VersionedNutritionGoal(
+    val goal: NutritionGoal,
+    val validFrom: Long
 )
 
 data class UserProfile(

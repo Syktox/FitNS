@@ -16,6 +16,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,7 +38,10 @@ import com.syktox.fitns.domain.model.UserProfile
 @Composable
 fun ProfileScreen(
     uiState: ProfileUiState,
-    onSave: (UserProfile, NutritionGoal) -> Unit
+    onSave: (UserProfile, NutritionGoal) -> Unit,
+    onOpenWeight: () -> Unit = {},
+    onOpenTips: () -> Unit = {},
+    onOpenSettings: () -> Unit = {}
 ) {
     var age by remember { mutableStateOf("") }
     var physiology by remember { mutableStateOf("") }
@@ -179,6 +183,20 @@ fun ProfileScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Save Profile")
+        }
+        Card {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Quick Access")
+                OutlinedButton(onClick = onOpenWeight, modifier = Modifier.fillMaxWidth()) {
+                    Text("Weight Tracking")
+                }
+                OutlinedButton(onClick = onOpenTips, modifier = Modifier.fillMaxWidth()) {
+                    Text("Coaching Tips")
+                }
+                OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+                    Text("Settings")
+                }
+            }
         }
     }
 }

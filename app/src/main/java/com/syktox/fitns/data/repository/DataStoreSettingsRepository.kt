@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.syktox.fitns.core.settings.EncryptedTokenStore
 import com.syktox.fitns.core.sync.SyncScheduler
 import com.syktox.fitns.core.settings.DefaultN8nBaseUrl
 import com.syktox.fitns.core.settings.N8nConnectionSettings
@@ -16,13 +17,14 @@ import javax.inject.Inject
 
 class DataStoreSettingsRepository @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val syncScheduler: SyncScheduler
+    private val syncScheduler: SyncScheduler,
+    private val tokenStore: EncryptedTokenStore
 ) : SettingsRepository {
     override fun observeN8nSettings(): Flow<N8nConnectionSettings> {
         return context.fitNsSettingsDataStore.data.map { preferences ->
             N8nConnectionSettings(
                 baseUrl = preferences[N8nBaseUrlKey] ?: DefaultN8nBaseUrl,
-                bearerTokenConfigured = false,
+                bearerTokenConfigured = tokenStore.hasToken(),
                 syncEnabled = preferences[N8nSyncEnabledKey] ?: false
             )
         }
@@ -31,6 +33,12 @@ class DataStoreSettingsRepository @Inject constructor(
     override fun observeTemporaryPhotosOnly(): Flow<Boolean> {
         return context.fitNsSettingsDataStore.data.map { preferences ->
             preferences[TemporaryPhotosOnlyKey] ?: true
+        }
+    }
+
+    override fun observeOnboardingCompleted(): Flow<Boolean> {
+        return context.fitNsSettingsDataStore.data.map { preferences ->
+            preferences[OnboardingCompletedKey] ?: false
         }
     }
 
@@ -55,9 +63,26 @@ class DataStoreSettingsRepository @Inject constructor(
         }
     }
 
+    override suspend fun completeOnboarding() {
+        context.fitNsSettingsDataStore.edit { preferences ->
+            preferences[OnboardingCompletedKey] = true
+        }
+    }
+
+    override suspend fun setBearerToken(token: String) {
+        tokenStore.save(token.trim())
+    }
+
+    override suspend fun readBearerToken(): String? = tokenStore.read()
+
+    override suspend fun clearBearerToken() {
+        tokenStore.clear()
+    }
+
     private companion object {
         val N8nBaseUrlKey = stringPreferencesKey("n8n_base_url")
         val N8nSyncEnabledKey = booleanPreferencesKey("n8n_sync_enabled")
         val TemporaryPhotosOnlyKey = booleanPreferencesKey("temporary_photos_only")
+        val OnboardingCompletedKey = booleanPreferencesKey("onboarding_completed")
     }
 }

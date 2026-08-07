@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.syktox.fitns.core.design.ScreenHeader
 import com.syktox.fitns.core.design.SectionTitle
 import com.syktox.fitns.domain.model.MealType
+import com.syktox.fitns.domain.model.Micronutrients
 
 data class ManualFoodInput(
     val name: String,
@@ -47,7 +48,8 @@ data class ManualFoodInput(
     val salt: Double,
     val sodiumMilligrams: Double?,
     val mealType: MealType,
-    val notes: String
+    val notes: String,
+    val micronutrients: Micronutrients = Micronutrients()
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)

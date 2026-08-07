@@ -4,9 +4,14 @@ import com.syktox.fitns.core.model.AppError
 import com.syktox.fitns.core.model.AppResult
 import com.syktox.fitns.core.network.N8nApiService
 import com.syktox.fitns.core.network.BarcodeRequest
+import com.syktox.fitns.core.network.ImageAnalysisItem
+import com.syktox.fitns.core.network.ImageAnalysisRequest
 import com.syktox.fitns.core.network.RemoteFoodProduct
+import com.syktox.fitns.core.network.RemoteNutritionFacts
 import com.syktox.fitns.domain.repository.N8nRepository
 import com.syktox.fitns.domain.model.FoodProductLookup
+import com.syktox.fitns.domain.model.MealAnalysisItem
+import com.syktox.fitns.domain.model.MealAnalysisResult
 import com.syktox.fitns.domain.model.NutritionFacts
 import com.squareup.moshi.Moshi
 import okhttp3.OkHttpClient
@@ -96,6 +101,63 @@ class RemoteN8nRepository @Inject constructor(
         }
     }
 
+    override suspend fun analyzeMealImage(
+        baseUrl: String,
+        bearerToken: String?,
+        imageBase64: String,
+        consentGranted: Boolean
+    ): AppResult<MealAnalysisResult> {
+        val normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+            ?: return AppResult.Failure(AppError.Validation("Enter a valid HTTPS base URL."))
+        if (!consentGranted) {
+            return AppResult.Failure(AppError.Validation("Consent is required before the photo is uploaded."))
+        }
+        if (imageBase64.isBlank()) {
+            return AppResult.Failure(AppError.Validation("Capture a photo of the meal first."))
+        }
+
+        return try {
+            val response = serviceFor(normalizedBaseUrl).analyzeMealImage(
+                authorization = bearerToken.asAuthorizationHeader(),
+                idempotencyKey = "image-${UUID.randomUUID()}",
+                request = ImageAnalysisRequest(
+                    imageBase64 = imageBase64,
+                    consentGranted = true,
+                    timestamp = Instant.now().toString()
+                )
+            )
+            when {
+                response.isSuccessful -> {
+                    val body = response.body()
+                    if (body != null && body.items.isNotEmpty()) {
+                        AppResult.Success(
+                            MealAnalysisResult(
+                                items = body.items.map { it.toDomain() },
+                                total = body.total.toDomain(),
+                                disclaimer = body.disclaimer
+                            )
+                        )
+                    } else {
+                        AppResult.Failure(AppError.NotFound)
+                    }
+                }
+                response.code() == 401 || response.code() == 403 -> AppResult.Failure(AppError.Unauthorized)
+                response.code() == 404 -> AppResult.Failure(AppError.NotFound)
+                else -> AppResult.Failure(AppError.Remote(response.code(), "n8n rejected the image analysis."))
+            }
+        } catch (_: SocketTimeoutException) {
+            AppResult.Failure(AppError.Timeout)
+        } catch (_: IOException) {
+            AppResult.Failure(AppError.Offline)
+        } catch (error: HttpException) {
+            AppResult.Failure(AppError.Remote(error.code(), error.message()))
+        } catch (error: IllegalArgumentException) {
+            AppResult.Failure(AppError.Validation(error.message ?: "Invalid base URL."))
+        } catch (error: Exception) {
+            AppResult.Failure(AppError.Unknown(error.message ?: "Unknown image analysis error."))
+        }
+    }
+
     private fun serviceFor(baseUrl: String): N8nApiService {
         return Retrofit.Builder()
             .baseUrl(baseUrl)
@@ -122,17 +184,30 @@ class RemoteN8nRepository @Inject constructor(
             name = name,
             brand = brand,
             servingSizeGrams = servingSizeGrams,
-            nutritionPer100g = NutritionFacts(
-                caloriesKcal = nutritionPer100g.caloriesKcal,
-                proteinGrams = nutritionPer100g.proteinGrams,
-                carbohydratesGrams = nutritionPer100g.carbohydratesGrams,
-                sugarGrams = nutritionPer100g.sugarGrams ?: 0.0,
-                fatGrams = nutritionPer100g.fatGrams,
-                saturatedFatGrams = nutritionPer100g.saturatedFatGrams ?: 0.0,
-                fiberGrams = nutritionPer100g.fiberGrams ?: 0.0,
-                saltGrams = nutritionPer100g.saltGrams ?: 0.0,
-                sodiumMilligrams = null
-            )
+            nutritionPer100g = nutritionPer100g.toDomain()
+        )
+    }
+
+    private fun ImageAnalysisItem.toDomain(): MealAnalysisItem {
+        return MealAnalysisItem(
+            name = name,
+            estimatedGrams = estimatedGrams,
+            confidence = confidence,
+            nutrition = nutrition.toDomain()
+        )
+    }
+
+    private fun RemoteNutritionFacts.toDomain(): NutritionFacts {
+        return NutritionFacts(
+            caloriesKcal = caloriesKcal,
+            proteinGrams = proteinGrams,
+            carbohydratesGrams = carbohydratesGrams,
+            sugarGrams = sugarGrams ?: 0.0,
+            fatGrams = fatGrams,
+            saturatedFatGrams = saturatedFatGrams ?: 0.0,
+            fiberGrams = fiberGrams ?: 0.0,
+            saltGrams = saltGrams ?: 0.0,
+            sodiumMilligrams = null
         )
     }
 }

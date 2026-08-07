@@ -1,9 +1,12 @@
 package com.syktox.fitns.data.repository
 
+import com.syktox.fitns.data.local.entity.NutrientTargetEntity
 import com.syktox.fitns.data.local.entity.NutritionGoalEntity
 import com.syktox.fitns.data.local.entity.SyncStatus
 import com.syktox.fitns.data.local.entity.UserProfileEntity
 import com.syktox.fitns.domain.model.DefaultUserProfileId
+import com.syktox.fitns.domain.model.NutrientKey
+import com.syktox.fitns.domain.model.NutrientTarget
 import com.syktox.fitns.domain.model.NutritionGoal
 import com.syktox.fitns.domain.model.UserProfile
 import java.util.UUID
@@ -65,7 +68,7 @@ fun NutritionGoalEntity.toDomain(): NutritionGoal {
     )
 }
 
-fun NutritionGoal.toEntity(now: Long = System.currentTimeMillis()): NutritionGoalEntity {
+fun NutritionGoal.toVersionedEntity(now: Long = System.currentTimeMillis()): NutritionGoalEntity {
     return NutritionGoalEntity(
         id = UUID.randomUUID().toString(),
         userProfileId = DefaultUserProfileId,
@@ -76,6 +79,34 @@ fun NutritionGoal.toEntity(now: Long = System.currentTimeMillis()): NutritionGoa
         fiberGrams = fiberGrams,
         waterMilliliters = waterMilliliters,
         validFrom = now,
+        validTo = null,
+        createdAt = now,
+        updatedAt = now,
+        deletedAt = null,
+        syncStatus = SyncStatus.PendingSync,
+        serverVersion = null
+    )
+}
+
+fun NutrientTargetEntity.toDomain(): NutrientTarget {
+    return NutrientTarget(
+        key = NutrientKey.entries.firstOrNull { it.name == nutrientKey } ?: NutrientKey.Calcium,
+        targetAmount = targetAmount,
+        unit = unit,
+        source = source
+    )
+}
+
+fun NutrientTarget.toEntity(now: Long = System.currentTimeMillis()): NutrientTargetEntity {
+    return NutrientTargetEntity(
+        id = UUID.randomUUID().toString(),
+        userProfileId = DefaultUserProfileId,
+        nutrientKey = key.name,
+        targetAmount = targetAmount,
+        unit = unit,
+        source = source,
+        validFrom = now,
+        validTo = null,
         createdAt = now,
         updatedAt = now,
         deletedAt = null,

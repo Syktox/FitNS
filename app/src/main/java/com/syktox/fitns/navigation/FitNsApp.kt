@@ -1,9 +1,5 @@
 package com.syktox.fitns.navigation
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.Icons
@@ -11,15 +7,12 @@ import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.MonitorWeight
-import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,9 +25,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.syktox.fitns.core.design.ScreenHeader
 import com.syktox.fitns.feature.bodyweight.BodyWeightScreen
 import com.syktox.fitns.feature.bodyweight.BodyWeightViewModel
 import com.syktox.fitns.feature.dashboard.DashboardScreen
@@ -64,15 +55,13 @@ private enum class Route(val value: String, val label: String, val icon: ImageVe
     Recommendations("recommendations", "Tips", Icons.Outlined.Lightbulb),
     History("history", "History", Icons.Outlined.FitnessCenter),
     Profile("profile", "Profile", Icons.Outlined.Person),
-    Settings("settings", "Settings", Icons.Outlined.Settings),
-    More("more", "More", Icons.Outlined.MoreHoriz)
+    Settings("settings", "Settings", Icons.Outlined.Settings)
 }
 
 @Composable
 fun FitNsApp() {
     val navController = rememberNavController()
-    val bottomRoutes = listOf(Route.Dashboard, Route.Nutrition, Route.Workout, Route.Progress, Route.More)
-    val moreRoutes = listOf(Route.BodyWeight, Route.Recommendations, Route.Profile, Route.Settings)
+    val bottomRoutes = listOf(Route.Dashboard, Route.Nutrition, Route.Workout, Route.Progress, Route.Profile)
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
 
     Scaffold(
@@ -81,7 +70,7 @@ fun FitNsApp() {
                 bottomRoutes.forEach { route ->
                     NavigationBarItem(
                         selected = currentDestination?.hierarchy?.any { destination ->
-                            destination.route == route.value || (route == Route.More && destination.route in moreRoutes.map { it.value })
+                            destination.route == route.value
                         } == true,
                         onClick = {
                             navController.navigate(route.value) {
@@ -118,6 +107,7 @@ fun FitNsApp() {
                     readiness = uiState.readiness,
                     coach = uiState.coach,
                     mealBreakdown = uiState.mealBreakdown,
+                    micronutrients = uiState.micronutrients,
                     message = uiState.message,
                     onAddFood = { navController.navigate(Route.AddFood.value) },
                     onStartWorkout = { navController.navigate(Route.Workout.value) },
@@ -131,6 +121,7 @@ fun FitNsApp() {
                     dashboard = uiState.dashboard,
                     foodHistory = uiState.foodHistory,
                     foodFavorites = uiState.foodFavorites,
+                    micronutrients = uiState.micronutrients,
                     errorMessage = uiState.errorMessage,
                     onAddFood = { navController.navigate(Route.AddFood.value) },
                     onDuplicateFood = viewModel::duplicateFood,
@@ -192,14 +183,6 @@ fun FitNsApp() {
                 val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
                 ProgressScreen(uiState = uiState)
             }
-            composable(Route.More.value) {
-                MoreScreen(
-                    onOpenWeight = { navController.navigate(Route.BodyWeight.value) },
-                    onOpenTips = { navController.navigate(Route.Recommendations.value) },
-                    onOpenProfile = { navController.navigate(Route.Profile.value) },
-                    onOpenSettings = { navController.navigate(Route.Settings.value) }
-                )
-            }
             composable(Route.Recommendations.value) {
                 val viewModel: RecommendationsViewModel = hiltViewModel()
                 val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
@@ -210,7 +193,10 @@ fun FitNsApp() {
                 val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
                 ProfileScreen(
                     uiState = uiState,
-                    onSave = viewModel::save
+                    onSave = viewModel::save,
+                    onOpenWeight = { navController.navigate(Route.BodyWeight.value) },
+                    onOpenTips = { navController.navigate(Route.Recommendations.value) },
+                    onOpenSettings = { navController.navigate(Route.Settings.value) }
                 )
             }
             composable(Route.Settings.value) {
@@ -225,43 +211,6 @@ fun FitNsApp() {
                     onRetrySyncNow = viewModel::retrySyncNow,
                     onGenerateExport = viewModel::generateLocalJsonExport
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MoreScreen(
-    onOpenWeight: () -> Unit,
-    onOpenTips: () -> Unit,
-    onOpenProfile: () -> Unit,
-    onOpenSettings: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        ScreenHeader(
-            title = "More",
-            subtitle = "Account, settings, weight tracking, and coaching tools."
-        )
-        MoreRouteCard(title = "Weight", subtitle = "Log body weight and review trend progress.", onOpen = onOpenWeight)
-        MoreRouteCard(title = "Tips", subtitle = "Review nutrition, recovery, and workout recommendations.", onOpen = onOpenTips)
-        MoreRouteCard(title = "Profile", subtitle = "Manage goals, body metrics, and nutrition targets.", onOpen = onOpenProfile)
-        MoreRouteCard(title = "Settings", subtitle = "Sync, privacy, connection, and export controls.", onOpen = onOpenSettings)
-    }
-}
-
-@Composable
-private fun MoreRouteCard(title: String, subtitle: String, onOpen: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, fontWeight = FontWeight.SemiBold)
-            Text(subtitle)
-            OutlinedButton(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
-                Text("Open")
             }
         }
     }

@@ -83,6 +83,22 @@ class LocalNutritionRepository @Inject constructor(
         return AppResult.Success(Unit)
     }
 
+    override suspend fun updateFood(entry: FoodLogEntry): AppResult<Unit> {
+        val existing = foodDao.findFoodEntry(entry.id)
+            ?: return AppResult.Failure(AppError.NotFound)
+        val error = validate(entry)
+        if (error != null) return AppResult.Failure(error)
+        val updated = entry.copy(consumedAt = existing.consumedAt)
+        foodDao.upsertFoodEntry(updated.toEntity())
+        syncQueueWriter.enqueue(
+            entityType = EntityTypeFoodEntry,
+            entityId = updated.id,
+            operation = OperationUpsert,
+            payloadJson = syncPayloadFactory.foodEntry(updated, OperationUpsert)
+        )
+        return AppResult.Success(Unit)
+    }
+
     override suspend fun saveFavorite(entry: FoodLogEntry): AppResult<Unit> {
         val error = validate(entry)
         if (error != null) return AppResult.Failure(error)

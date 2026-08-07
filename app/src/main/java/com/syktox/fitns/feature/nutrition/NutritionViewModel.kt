@@ -10,11 +10,14 @@ import com.syktox.fitns.domain.model.FoodFavoritePreset
 import com.syktox.fitns.domain.model.FoodLogEntry
 import com.syktox.fitns.domain.model.FoodProductLookup
 import com.syktox.fitns.domain.model.MealType
+import com.syktox.fitns.domain.model.NutrientAggregate
 import com.syktox.fitns.domain.model.NutritionFacts
 import com.syktox.fitns.domain.model.NutritionGoal
 import com.syktox.fitns.domain.repository.N8nRepository
 import com.syktox.fitns.domain.repository.NutritionRepository
+import com.syktox.fitns.domain.repository.ProfileRepository
 import com.syktox.fitns.domain.repository.SettingsRepository
+import com.syktox.fitns.domain.usecase.NutrientAggregator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,8 +34,16 @@ data class NutritionUiState(
     val dashboard: DailyNutritionDashboard = EmptyNutritionDashboard,
     val foodHistory: List<FoodLogEntry> = emptyList(),
     val foodFavorites: List<FoodFavoritePreset> = emptyList(),
+    val micronutrients: List<NutrientAggregate> = emptyList(),
     val errorMessage: String? = null,
     val barcodeLookup: BarcodeLookupUiState = BarcodeLookupUiState()
+)
+
+private data class NutritionCore(
+    val dashboard: DailyNutritionDashboard,
+    val foodHistory: List<FoodLogEntry>,
+    val foodFavorites: List<FoodFavoritePreset>,
+    val micronutrients: List<NutrientAggregate>
 )
 
 data class BarcodeLookupUiState(
@@ -60,22 +71,37 @@ private val EmptyNutritionDashboard = DailyNutritionDashboard(
 class NutritionViewModel @Inject constructor(
     private val nutritionRepository: NutritionRepository,
     private val n8nRepository: N8nRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    profileRepository: ProfileRepository,
+    aggregator: NutrientAggregator
 ) : ViewModel() {
     private val errorMessage = MutableStateFlow<String?>(null)
     private val barcodeLookup = MutableStateFlow(BarcodeLookupUiState())
 
     val uiState: StateFlow<NutritionUiState> = combine(
-        nutritionRepository.observeToday(),
-        nutritionRepository.observeFoodHistory().map { entries -> entries.distinctBy { it.name to it.brand }.take(30) },
-        nutritionRepository.observeFoodFavorites(),
+        combine(
+            nutritionRepository.observeToday(),
+            nutritionRepository.observeFoodHistory().map { entries -> entries.distinctBy { it.name to it.brand }.take(30) },
+            nutritionRepository.observeFoodFavorites(),
+            profileRepository.observeNutrientTargets()
+        ) { dashboard, history, favorites, targets ->
+            NutritionCore(
+                dashboard = dashboard,
+                foodHistory = history,
+                foodFavorites = favorites,
+                micronutrients = aggregator.aggregate(dashboard.entries, targets)
+                    .filter { it.hasData && it.hasTarget }
+                    .sortedBy { it.key.label }
+            )
+        },
         errorMessage,
         barcodeLookup
-    ) { dashboard, history, favorites, error, lookup ->
+    ) { core, error, lookup ->
         NutritionUiState(
-            dashboard = dashboard,
-            foodHistory = history,
-            foodFavorites = favorites,
+            dashboard = core.dashboard,
+            foodHistory = core.foodHistory,
+            foodFavorites = core.foodFavorites,
+            micronutrients = core.micronutrients,
             errorMessage = error,
             barcodeLookup = lookup
         )
@@ -89,6 +115,20 @@ class NutritionViewModel @Inject constructor(
         barcodeLookup.value = barcodeLookup.value.copy(
             barcode = barcode,
             statusMessage = null
+        )
+    }
+
+    fun onBarcodeScanned(barcode: String) {
+        updateBarcode(barcode)
+        lookupBarcode()
+    }
+
+    fun applyLabelValues(input: ManualFoodInput) {
+        barcodeLookup.value = barcodeLookup.value.copy(
+            barcode = "",
+            loading = false,
+            statusMessage = "Nutrition label values were filled in. Review them before saving.",
+            prefillInput = input
         )
     }
 
@@ -150,7 +190,8 @@ class NutritionViewModel @Inject constructor(
                         sodiumMilligrams = input.sodiumMilligrams
                     ),
                     dataQuality = DataQuality.Verified,
-                    notes = input.notes
+                    notes = input.notes,
+                    micronutrients = input.micronutrients
                 )
             )
             when (result) {
@@ -159,6 +200,39 @@ class NutritionViewModel @Inject constructor(
                     onSaved()
                 }
                 is AppResult.Failure -> errorMessage.value = "Entry could not be saved."
+            }
+        }
+    }
+
+    fun updateFood(entry: FoodLogEntry, input: ManualFoodInput, onSaved: () -> Unit) {
+        viewModelScope.launch {
+            val result = nutritionRepository.updateFood(
+                entry.copy(
+                    name = input.name.ifBlank { "Manual entry" },
+                    brand = input.brand,
+                    mealType = input.mealType,
+                    grams = input.grams,
+                    nutrition = NutritionFacts(
+                        caloriesKcal = input.calories,
+                        proteinGrams = input.protein,
+                        carbohydratesGrams = input.carbohydrates,
+                        sugarGrams = input.sugar,
+                        fatGrams = input.fat,
+                        saturatedFatGrams = input.saturatedFat,
+                        fiberGrams = input.fiber,
+                        saltGrams = input.salt,
+                        sodiumMilligrams = input.sodiumMilligrams
+                    ),
+                    notes = input.notes,
+                    micronutrients = input.micronutrients
+                )
+            )
+            when (result) {
+                is AppResult.Success -> {
+                    errorMessage.value = null
+                    onSaved()
+                }
+                is AppResult.Failure -> errorMessage.value = "Entry could not be updated."
             }
         }
     }

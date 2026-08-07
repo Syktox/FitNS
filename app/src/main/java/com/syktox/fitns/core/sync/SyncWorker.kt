@@ -39,10 +39,11 @@ class SyncWorker @AssistedInject constructor(
         if (dueItems.isEmpty()) return Result.success()
 
         val service = serviceFor(baseUrl)
+        val authorization = settingsRepository.readBearerToken().asAuthorizationHeader()
         var shouldRetry = false
 
         dueItems.forEach { item ->
-            val result = runCatching { sendItem(service, item) }
+            val result = runCatching { sendItem(service, item, authorization) }
             if (result.isSuccess) {
                 syncQueueDao.updateStatus(item.id, SyncStatus.Synced, System.currentTimeMillis())
             } else {
@@ -60,17 +61,22 @@ class SyncWorker @AssistedInject constructor(
         return if (shouldRetry) Result.retry() else Result.success()
     }
 
-    private suspend fun sendItem(service: N8nApiService, item: SyncQueueItemEntity) {
+    private suspend fun sendItem(service: N8nApiService, item: SyncQueueItemEntity, authorization: String?) {
         val body = item.payloadJson.toRequestBody(JsonMediaType)
         val response = when (item.entityType) {
-            EntityTypeFoodEntry -> service.syncNutrition(null, item.idempotencyKey, body)
-            EntityTypeWorkout -> service.syncWorkout(null, item.idempotencyKey, body)
-            EntityTypeBodyWeight -> service.syncBodyWeight(null, item.idempotencyKey, body)
+            EntityTypeFoodEntry -> service.syncNutrition(authorization, item.idempotencyKey, body)
+            EntityTypeWorkout -> service.syncWorkout(authorization, item.idempotencyKey, body)
+            EntityTypeBodyWeight -> service.syncBodyWeight(authorization, item.idempotencyKey, body)
             else -> error("Unsupported sync entity type: ${item.entityType}")
         }
         if (!response.isSuccessful) {
             throw IOException("HTTP ${response.code()}")
         }
+    }
+
+    private fun String?.asAuthorizationHeader(): String? {
+        val token = this?.trim().orEmpty()
+        return if (token.isBlank()) null else "Bearer $token"
     }
 
     private fun serviceFor(baseUrl: String): N8nApiService {

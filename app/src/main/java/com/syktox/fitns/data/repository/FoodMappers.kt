@@ -1,5 +1,6 @@
 package com.syktox.fitns.data.repository
 
+import com.syktox.fitns.core.serialization.MicronutrientsCodec
 import com.syktox.fitns.data.local.entity.FoodEntryEntity
 import com.syktox.fitns.data.local.entity.SyncStatus
 import com.syktox.fitns.domain.model.DataQuality
@@ -27,7 +28,8 @@ fun FoodEntryEntity.toDomain(): FoodLogEntry {
         ),
         dataQuality = dataQuality.toDataQuality(),
         notes = notes,
-        consumedAt = consumedAt
+        consumedAt = consumedAt,
+        micronutrients = MicronutrientsCodec.decode(micronutrientsJson)
     )
 }
 
@@ -49,6 +51,7 @@ fun FoodLogEntry.toEntity(now: Long = System.currentTimeMillis()): FoodEntryEnti
         fiberGrams = nutrition.fiberGrams,
         saltGrams = nutrition.saltGrams,
         sodiumMilligrams = nutrition.sodiumMilligrams,
+        micronutrientsJson = MicronutrientsCodec.encode(micronutrients),
         consumedAt = this.consumedAt,
         notes = notes,
         dataQuality = dataQuality.name,

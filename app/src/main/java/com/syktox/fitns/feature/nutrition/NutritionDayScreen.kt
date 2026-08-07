@@ -34,13 +34,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.syktox.fitns.core.design.EmptyStateCard
 import com.syktox.fitns.core.design.ErrorBanner
+import com.syktox.fitns.core.design.LabeledProgress
 import com.syktox.fitns.core.design.ScreenHeader
 import com.syktox.fitns.core.design.SectionTitle
+import com.syktox.fitns.core.design.TagChip
 import com.syktox.fitns.domain.model.DataQuality
 import com.syktox.fitns.domain.model.DailyNutritionDashboard
 import com.syktox.fitns.domain.model.FoodFavoritePreset
 import com.syktox.fitns.domain.model.FoodLogEntry
 import com.syktox.fitns.domain.model.MealType
+import com.syktox.fitns.domain.model.NutrientAggregate
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -49,6 +52,7 @@ fun NutritionDayScreen(
     dashboard: DailyNutritionDashboard,
     foodHistory: List<FoodLogEntry>,
     foodFavorites: List<FoodFavoritePreset>,
+    micronutrients: List<NutrientAggregate>,
     errorMessage: String?,
     onAddFood: () -> Unit,
     onDuplicateFood: (FoodLogEntry) -> Unit,
@@ -133,6 +137,9 @@ fun NutritionDayScreen(
         }
         item {
             NutritionTargetsCard(dashboard = dashboard)
+        }
+        item {
+            MicronutrientsCard(micronutrients = micronutrients)
         }
         if (dashboard.entries.isNotEmpty()) {
             item {
@@ -225,6 +232,51 @@ private fun NutritionTargetsCard(dashboard: DailyNutritionDashboard) {
                 target = dashboard.goal.fatGrams,
                 unit = "g"
             )
+        }
+    }
+}
+
+@Composable
+private fun MicronutrientsCard(micronutrients: List<NutrientAggregate>) {
+    if (micronutrients.isEmpty()) {
+        Card {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SectionTitle("Micronutrients")
+                Text(
+                    "No micronutrient data yet. Foods logged with vitamin and mineral values will appear here.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+    Card {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                SectionTitle("Micronutrients")
+                TagChip(
+                    text = "${micronutrients.count { it.percent >= 1f }}/${micronutrients.size} met",
+                    accent = true
+                )
+            }
+            micronutrients.forEach { aggregate ->
+                LabeledProgress(
+                    label = aggregate.label,
+                    current = "${aggregate.consumed?.roundToInt() ?: 0} / ${aggregate.target?.roundToInt() ?: 0} ${aggregate.unit}",
+                    progress = aggregate.percent,
+                    barColor = if (aggregate.percent >= 1f) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.tertiary
+                    }
+                )
+            }
+            if (micronutrients.none { it.percent < 1f }) {
+                Text(
+                    "All logged targets are covered today.",
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }

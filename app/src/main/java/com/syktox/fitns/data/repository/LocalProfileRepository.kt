@@ -3,12 +3,17 @@ package com.syktox.fitns.data.repository
 import com.syktox.fitns.core.model.AppError
 import com.syktox.fitns.core.model.AppResult
 import com.syktox.fitns.data.local.dao.ProfileDao
+import com.syktox.fitns.data.local.entity.SyncStatus
+import com.syktox.fitns.domain.model.DefaultNutrientTargets
 import com.syktox.fitns.domain.model.DefaultUserProfileId
+import com.syktox.fitns.domain.model.NutrientTarget
 import com.syktox.fitns.domain.model.NutritionGoal
 import com.syktox.fitns.domain.model.UserProfile
+import com.syktox.fitns.domain.model.VersionedNutritionGoal
 import com.syktox.fitns.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 import javax.inject.Inject
 
 class LocalProfileRepository @Inject constructor(
@@ -26,6 +31,29 @@ class LocalProfileRepository @Inject constructor(
         }
     }
 
+    override fun observeNutritionGoalForDate(dateMillis: Long): Flow<NutritionGoal> {
+        return profileDao.observeNutritionGoalForDate(DefaultUserProfileId, dateMillis).map { entity ->
+            entity?.toDomain() ?: DefaultNutritionGoal
+        }
+    }
+
+    override fun observeNutritionGoalHistory(): Flow<List<VersionedNutritionGoal>> {
+        return profileDao.observeNutritionGoalHistory(DefaultUserProfileId).map { entities ->
+            entities.map { entity ->
+                VersionedNutritionGoal(
+                    goal = entity.toDomain(),
+                    validFrom = entity.validFrom
+                )
+            }
+        }
+    }
+
+    override fun observeNutrientTargets(): Flow<List<NutrientTarget>> {
+        return profileDao.observeActiveNutrientTargets(DefaultUserProfileId).map { entities ->
+            entities.map { it.toDomain() }.ifEmpty { DefaultNutrientTargets.targets }
+        }
+    }
+
     override suspend fun saveProfile(profile: UserProfile): AppResult<Unit> {
         val error = validateProfile(profile)
         if (error != null) return AppResult.Failure(error)
@@ -36,7 +64,19 @@ class LocalProfileRepository @Inject constructor(
     override suspend fun saveNutritionGoal(goal: NutritionGoal): AppResult<Unit> {
         val error = validateGoal(goal)
         if (error != null) return AppResult.Failure(error)
-        profileDao.upsertNutritionGoal(goal.toEntity())
+        val now = System.currentTimeMillis()
+        val open = profileDao.findOpenNutritionGoal(DefaultUserProfileId)
+        if (open != null) {
+            profileDao.closeNutritionGoal(open.id, now, now)
+        }
+        profileDao.upsertNutritionGoal(goal.toVersionedEntity(now))
+        return AppResult.Success(Unit)
+    }
+
+    override suspend fun saveNutrientTargets(targets: List<NutrientTarget>): AppResult<Unit> {
+        val now = System.currentTimeMillis()
+        profileDao.closeAllNutrientTargets(DefaultUserProfileId, now, now)
+        profileDao.upsertNutrientTargets(targets.map { it.toEntity(now) })
         return AppResult.Success(Unit)
     }
 
