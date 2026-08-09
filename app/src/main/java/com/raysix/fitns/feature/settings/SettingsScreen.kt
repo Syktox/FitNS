@@ -8,18 +8,24 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.raysix.fitns.core.design.FitNsDimens
+import com.raysix.fitns.core.design.ModernCard
 import com.raysix.fitns.core.design.ScreenHeader
+import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.SectionTitle
 
 @Composable
@@ -35,30 +41,43 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(FitNsDimens.ScreenPadding),
+        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
     ) {
         ScreenHeader(
             title = "Settings",
             subtitle = "Sync, privacy, and local export controls."
         )
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    SectionTitle("n8n Connection")
-                    StatusPill(uiState.connectionStatus)
-                }
+        SectionCard(
+            title = "n8n Connection",
+            trailing = {
+                StatusPill(uiState.connectionStatus)
+            }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = uiState.n8nSettings.baseUrl,
                     onValueChange = onN8nBaseUrlChange,
                     label = { Text("Base URL") },
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
-                Button(
+                Surface(
                     onClick = onTestConnection,
-                    enabled = !uiState.testingConnection
+                    enabled = !uiState.testingConnection,
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(if (uiState.testingConnection) "Testing..." else "Test connection")
+                    Text(
+                        if (uiState.testingConnection) "Testing..." else "Test connection",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
                 }
                 SettingRow(
                     label = "Enable sync",
@@ -67,35 +86,55 @@ fun SettingsScreen(
                     onCheckedChange = onSyncEnabledChange
                 )
                 Text("Pending sync items: ${uiState.pendingSyncCount}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(
+                Surface(
                     onClick = onRetrySyncNow,
-                    enabled = uiState.n8nSettings.syncEnabled && uiState.pendingSyncCount > 0
+                    enabled = uiState.n8nSettings.syncEnabled && uiState.pendingSyncCount > 0,
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Sync now")
+                    Text(
+                        "Sync now",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
                 }
             }
         }
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionTitle("Privacy")
+        SectionCard(title = "Privacy") {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SettingRow(
                     label = "Store photos temporarily only",
                     supportingText = "Photo analysis should not persist raw images longer than needed.",
                     checked = uiState.temporaryPhotosOnly,
                     onCheckedChange = onTemporaryPhotosOnlyChange
                 )
-                Text("Photo uploads require explicit consent for each analysis.")
-                Button(onClick = onGenerateExport) {
-                    Text("Prepare JSON export")
+                Text("Photo uploads require explicit consent for each analysis.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Surface(
+                    onClick = onGenerateExport,
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Prepare JSON export",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 12.dp)
+                    )
                 }
                 uiState.exportStatus?.let { status ->
-                    Text(status, color = MaterialTheme.colorScheme.primary)
+                    Text(status, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
                 }
                 uiState.exportPreview?.let { preview ->
-                    Card {
+                    ModernCard(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurface) {
                         Text(
                             text = preview,
-                            modifier = Modifier.padding(12.dp),
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -109,7 +148,8 @@ fun SettingsScreen(
 private fun SettingRow(label: String, supportingText: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(label, fontWeight = FontWeight.SemiBold)
@@ -129,10 +169,9 @@ private fun StatusPill(status: String) {
     }
     Box(
         modifier = Modifier
-            .padding(start = 8.dp)
             .background(color.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
-        Text(status, color = color, style = MaterialTheme.typography.labelMedium)
+        Text(status, color = color, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
     }
 }

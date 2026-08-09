@@ -12,16 +12,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -36,12 +36,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raysix.fitns.core.design.ErrorBanner
+import com.raysix.fitns.core.design.FitNsDimens
 import com.raysix.fitns.core.design.ScreenHeader
-import com.raysix.fitns.core.design.SectionTitle
+import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.domain.model.NutritionGoal
 import com.raysix.fitns.domain.model.UserProfile
 import com.raysix.fitns.domain.usecase.NutritionGoalEstimator
@@ -109,34 +111,36 @@ fun OnboardingScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(FitNsDimens.ScreenPadding),
+        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
     ) {
         ScreenHeader(
             title = "Welcome to FitNS",
             subtitle = "Set up your profile so nutrition and workout targets match your goal."
         )
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionTitle("Sign in with Google")
-                Text(
-                    text = "Optional: connect your Google account to personalize the app.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                val googleAccount = uiState.googleAccount
-                if (googleAccount == null) {
-                    OutlinedButton(
-                        onClick = {
-                            val intent = viewModel.createSignInIntent()
-                            if (intent != null) {
-                                signInLauncher.launch(intent)
-                            } else {
-                                viewModel.setSignInError(
-                                    "Google sign-in is not configured yet. Add GOOGLE_WEB_CLIENT_ID to local.properties and rebuild."
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
+        SectionCard(title = "Sign in with Google", subtitle = "Optional: connect your Google account to personalize the app.") {
+            val googleAccount = uiState.googleAccount
+            if (googleAccount == null) {
+                Surface(
+                    onClick = {
+                        val intent = viewModel.createSignInIntent()
+                        if (intent != null) {
+                            signInLauncher.launch(intent)
+                        } else {
+                            viewModel.setSignInError(
+                                "Google sign-in is not configured yet. Add GOOGLE_WEB_CLIENT_ID to local.properties and rebuild."
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ) {
+                    Row(
+                        Modifier.padding(vertical = 13.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = GoogleGLogo,
@@ -146,36 +150,48 @@ fun OnboardingScreen(
                         )
                         Text(
                             text = "Continue with Google",
-                            modifier = Modifier.padding(start = 8.dp)
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(start = 10.dp)
                         )
                     }
-                } else {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        if (googleAccount.displayName.isNotBlank()) {
+                            Text(googleAccount.displayName, fontWeight = FontWeight.SemiBold)
+                        }
+                        Text(
+                            text = googleAccount.email,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Surface(
+                        onClick = viewModel::onGoogleSignOut,
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.onSurface
                     ) {
-                        Column {
-                            if (googleAccount.displayName.isNotBlank()) {
-                                Text(googleAccount.displayName, fontWeight = FontWeight.SemiBold)
-                            }
-                            Text(
-                                text = googleAccount.email,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        OutlinedButton(onClick = viewModel::onGoogleSignOut) {
-                            Text("Disconnect")
-                        }
+                        Text(
+                            "Disconnect",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                        )
                     }
                 }
-                uiState.signInError?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error)
-                }
+            }
+            uiState.signInError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
             }
         }
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionTitle("Profile")
+        SectionCard(title = "Profile") {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NumericField(age, { age = it }, "Age", Modifier.weight(1f))
                     NumericField(trainingDays, { trainingDays = it }, "Training days", Modifier.weight(1f))
@@ -183,6 +199,7 @@ fun OnboardingScreen(
                 OutlinedTextField(
                     physiology, { physiology = it },
                     label = { Text("Physiology") },
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -193,6 +210,7 @@ fun OnboardingScreen(
                 OutlinedTextField(
                     activity, { activity = it },
                     label = { Text("Activity level") },
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
                 ChoiceChips(
@@ -203,6 +221,7 @@ fun OnboardingScreen(
                 OutlinedTextField(
                     goalName, { goalName = it },
                     label = { Text("Goal") },
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
                 ChoiceChips(
@@ -212,32 +231,38 @@ fun OnboardingScreen(
                 )
             }
         }
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    SectionTitle("Nutrition Goals")
-                    Button(
-                        onClick = {
-                            val estimate = NutritionGoalEstimator.estimate(
-                                weightKg = weight.toDoubleOrNull(),
-                                goal = goalName.ifBlank { "Maintain" },
-                                activityLevel = activity.ifBlank { "Moderate" }
-                            )
-                            calories = estimate.caloriesKcal.formatPlain()
-                            protein = estimate.proteinGrams.formatPlain()
-                            carbs = estimate.carbohydrateGrams.formatPlain()
-                            fat = estimate.fatGrams.formatPlain()
-                            fiber = estimate.fiberGrams.formatPlain()
-                            water = estimate.waterMilliliters.formatPlain()
-                        }
-                    ) {
-                        Text("Estimate")
-                    }
+        SectionCard(
+            title = "Nutrition Goals",
+            subtitle = "Estimates use body weight, activity, and goal. Adjust them after observing progress.",
+            trailing = {
+                Surface(
+                    onClick = {
+                        val estimate = NutritionGoalEstimator.estimate(
+                            weightKg = weight.toDoubleOrNull(),
+                            goal = goalName.ifBlank { "Maintain" },
+                            activityLevel = activity.ifBlank { "Moderate" }
+                        )
+                        calories = estimate.caloriesKcal.formatPlain()
+                        protein = estimate.proteinGrams.formatPlain()
+                        carbs = estimate.carbohydrateGrams.formatPlain()
+                        fat = estimate.fatGrams.formatPlain()
+                        fiber = estimate.fiberGrams.formatPlain()
+                        water = estimate.waterMilliliters.formatPlain()
+                    },
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Text(
+                        "Estimate",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                    )
                 }
-                Text(
-                    text = "Estimates use body weight, activity, and goal. Adjust them after observing progress.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 NumericField(calories, { calories = it }, "Calories kcal")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NumericField(protein, { protein = it }, "Protein g", Modifier.weight(1f))
@@ -253,7 +278,7 @@ fun OnboardingScreen(
         uiState.errorMessage?.let {
             ErrorBanner(it)
         }
-        Button(
+        Surface(
             onClick = {
                 viewModel.save(
                     profile = UserProfile(
@@ -277,9 +302,18 @@ fun OnboardingScreen(
                     onComplete = onDone
                 )
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(999.dp),
+            color = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
         ) {
-            Text(if (uiState.saving) "Saving..." else "Get Started")
+            Text(
+                text = if (uiState.saving) "Saving..." else "Get Started",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(vertical = 14.dp)
+            )
         }
     }
 }
@@ -310,6 +344,7 @@ private fun NumericField(
         onValueChange = onValueChange,
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        shape = RoundedCornerShape(16.dp),
         modifier = modifier
     )
 }

@@ -10,7 +10,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -25,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raysix.fitns.core.design.ErrorBanner
+import com.raysix.fitns.core.design.ModernCard
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionTitle
 import com.raysix.fitns.domain.model.NutrientKey
@@ -72,7 +72,7 @@ private fun CaptureStep(
             subtitle = "Photograph the nutrition table and ingredient section. OCR results are only a draft and must be confirmed."
         )
         if (loading) {
-            Card {
+            ModernCard {
                 Text(
                     "Recognizing text...",
                     modifier = Modifier.padding(14.dp),
@@ -115,7 +115,7 @@ private fun ReviewStep(
         }
 
         state.previewBitmap?.let { bitmap ->
-            Card {
+            ModernCard {
                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SectionTitle("Recognized photo")
                     androidx.compose.foundation.Image(
@@ -132,7 +132,7 @@ private fun ReviewStep(
             }
         }
 
-        Card {
+        ModernCard {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SectionTitle("Product")
                 OutlinedTextField(
@@ -160,7 +160,7 @@ private fun ReviewStep(
             }
         }
 
-        Card {
+        ModernCard {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SectionTitle("Detected nutrition values")
                 LabelNumericField(state.calories, viewModel::onCaloriesChange, "Calories")
@@ -184,7 +184,7 @@ private fun ReviewStep(
         }
 
         if (state.micronutrients.values.isNotEmpty()) {
-            Card {
+            ModernCard {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SectionTitle("Recognized micronutrients")
                     state.micronutrients.values.entries

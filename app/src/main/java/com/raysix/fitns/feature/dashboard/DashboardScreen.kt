@@ -6,21 +6,32 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.raysix.fitns.core.design.BrandGradient
 import com.raysix.fitns.core.design.EmptyStateCard
+import com.raysix.fitns.core.design.FitNsDimens
+import com.raysix.fitns.core.design.GradientHeroCard
 import com.raysix.fitns.core.design.LabeledProgress
+import com.raysix.fitns.core.design.MetricProgressBar
+import com.raysix.fitns.core.design.MetricRing
+import com.raysix.fitns.core.design.ModernCard
+import com.raysix.fitns.core.design.ProgressRing
 import com.raysix.fitns.core.design.ScreenHeader
+import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.SectionTitle
 import com.raysix.fitns.core.design.StatCard
 import com.raysix.fitns.core.design.TagChip
@@ -45,8 +56,8 @@ fun DashboardScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(FitNsDimens.ScreenPadding),
+        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
     ) {
         item {
             ScreenHeader(
@@ -55,24 +66,17 @@ fun DashboardScreen(
             )
         }
         item {
-            DailyCoachCard(coach = coach)
-        }
-        item {
-            CalorieCard(
+            CalorieHeroCard(
                 dashboard = dashboard,
                 onAddFood = onAddFood,
                 onStartWorkout = onStartWorkout
             )
         }
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MacroMetric("Protein", dashboard.total.proteinGrams, dashboard.goal.proteinGrams, "g", Modifier.weight(1f))
-                MacroMetric("Carbs", dashboard.total.carbohydratesGrams, dashboard.goal.carbohydrateGrams, "g", Modifier.weight(1f))
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MacroMetric("Fat", dashboard.total.fatGrams, dashboard.goal.fatGrams, "g", Modifier.weight(1f))
-                MacroMetric("Fiber", dashboard.total.fiberGrams, dashboard.goal.fiberGrams, "g", Modifier.weight(1f))
-            }
+            DailyCoachCard(coach = coach)
+        }
+        item {
+            MacroRingsCard(dashboard = dashboard)
         }
         item {
             WaterCard(dashboard = dashboard, message = message, onAddWater = onAddWater)
@@ -109,89 +113,253 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun CalorieCard(
+private fun CalorieHeroCard(
     dashboard: DailyNutritionDashboard,
     onAddFood: () -> Unit,
     onStartWorkout: () -> Unit
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("Calories", fontWeight = FontWeight.SemiBold)
+    val percent = if (dashboard.goal.caloriesKcal > 0) {
+        (dashboard.total.caloriesKcal / dashboard.goal.caloriesKcal).toFloat()
+    } else 0f
+    val track = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.28f)
+    val onPrimary = MaterialTheme.colorScheme.onPrimary
+
+    GradientHeroCard(brush = BrandGradient) {
+        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
-                        "${dashboard.total.caloriesKcal.roundToInt()} / ${dashboard.goal.caloriesKcal.roundToInt()} kcal",
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        "TODAY",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = onPrimary.copy(alpha = 0.85f)
+                    )
+                    Text(
+                        "Calories",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = onPrimary
+                    )
+                    Text(
+                        "${dashboard.total.caloriesKcal.roundToInt()} of ${dashboard.goal.caloriesKcal.roundToInt()} kcal",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = onPrimary.copy(alpha = 0.9f),
+                        fontWeight = FontWeight.Medium
                     )
                 }
-                Text(
-                    "${dashboard.remainingCalories.roundToInt()} kcal left",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
+                ProgressRing(
+                    progress = percent,
+                    modifier = Modifier.size(104.dp),
+                    stroke = 12.dp,
+                    color = onPrimary,
+                    trackColor = track
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            "${dashboard.remainingCalories.roundToInt()}",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = onPrimary
+                        )
+                        Text(
+                            "left",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = onPrimary.copy(alpha = 0.85f)
+                        )
+                    }
+                }
             }
-            LabeledProgress(
-                label = "Daily goal",
-                current = "${(dashboard.total.caloriesKcal / dashboard.goal.caloriesKcal * 100).roundToInt()}%",
-                progress = (dashboard.total.caloriesKcal / dashboard.goal.caloriesKcal).toFloat()
+            LinearProgressIndicator(
+                progress = { percent.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+                color = onPrimary,
+                trackColor = track,
+                strokeCap = StrokeCap.Round,
+                gapSize = 6.dp
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onAddFood) {
-                    Text("Add Food")
-                }
-                OutlinedButton(onClick = onStartWorkout) {
-                    Text("Workout")
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                HeroPillButton(
+                    text = "Add Food",
+                    filled = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = onAddFood
+                )
+                HeroPillButton(
+                    text = "Workout",
+                    filled = false,
+                    modifier = Modifier.weight(1f),
+                    onClick = onStartWorkout
+                )
             }
         }
     }
 }
 
 @Composable
-private fun WaterCard(dashboard: DailyNutritionDashboard, message: String?, onAddWater: (Double) -> Unit) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+private fun HeroPillButton(
+    text: String,
+    filled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(999.dp),
+        color = if (filled) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            androidx.compose.ui.graphics.Color.Transparent
+        },
+        contentColor = if (filled) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onPrimary
+        },
+        border = if (filled) {
+            null
+        } else {
+            androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f))
+        }
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
+        )
+    }
+}
+
+@Composable
+private fun MacroRingsCard(dashboard: DailyNutritionDashboard) {
+    ModernCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FitNsDimens.SectionSpacing)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Water", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "${dashboard.waterMilliliters.roundToInt()} / ${dashboard.goal.waterMilliliters.roundToInt()} ml",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onAddWater(250.0) }) {
-                        Text("+250 ml")
-                    }
-                    OutlinedButton(onClick = { onAddWater(500.0) }) {
-                        Text("+500 ml")
-                    }
-                }
+                SectionTitle("Macros")
+                TagChip(text = "Daily goals", accent = true)
             }
-            LabeledProgress(
-                label = "Hydration",
-                current = "${(dashboard.waterMilliliters / dashboard.goal.waterMilliliters * 100).roundToInt()}%",
-                progress = (dashboard.waterMilliliters / dashboard.goal.waterMilliliters).toFloat()
-            )
-            message?.let {
-                Text(it, color = MaterialTheme.colorScheme.primary)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                MacroRing("Protein", dashboard.total.proteinGrams, dashboard.goal.proteinGrams, "g", Modifier.weight(1f))
+                MacroRing("Carbs", dashboard.total.carbohydratesGrams, dashboard.goal.carbohydrateGrams, "g", Modifier.weight(1f))
+                MacroRing("Fat", dashboard.total.fatGrams, dashboard.goal.fatGrams, "g", Modifier.weight(1f))
+                MacroRing("Fiber", dashboard.total.fiberGrams, dashboard.goal.fiberGrams, "g", Modifier.weight(1f))
             }
         }
+    }
+}
+
+@Composable
+private fun MacroRing(
+    label: String,
+    value: Double,
+    target: Double,
+    unit: String,
+    modifier: Modifier = Modifier
+) {
+    val percent = if (target > 0) (value / target).toFloat() else 0f
+    val color = if (percent >= 1f) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.tertiary
+    }
+    MetricRing(
+        label = label,
+        value = "${value.roundToInt()}/$unit",
+        percent = percent,
+        modifier = modifier,
+        color = color
+    )
+}
+
+@Composable
+private fun WaterCard(dashboard: DailyNutritionDashboard, message: String?, onAddWater: (Double) -> Unit) {
+    val percent = if (dashboard.goal.waterMilliliters > 0) {
+        (dashboard.waterMilliliters / dashboard.goal.waterMilliliters).toFloat()
+    } else 0f
+
+    ModernCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FitNsDimens.SectionSpacing)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text("Hydration", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${dashboard.waterMilliliters.roundToInt()} of ${dashboard.goal.waterMilliliters.roundToInt()} ml",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        HeroPillButtonSmall("+250", { onAddWater(250.0) }, Modifier)
+                        HeroPillButtonSmall("+500", { onAddWater(500.0) }, Modifier)
+                    }
+                }
+                ProgressRing(
+                    progress = percent,
+                    modifier = Modifier.size(88.dp),
+                    stroke = 11.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "${(percent * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+            MetricProgressBar(
+                progress = percent,
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primary
+            )
+            message?.let {
+                Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroPillButtonSmall(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
     }
 }
 
 @Composable
 private fun ReadinessCard(readiness: DashboardReadiness, onStartWorkout: () -> Unit) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(Modifier.weight(1f)) {
-                    Text(readiness.title, fontWeight = FontWeight.SemiBold)
-                    Text(readiness.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                TagChip(text = readiness.status, accent = true)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    SectionCard(title = "Readiness", trailing = { TagChip(text = readiness.status, accent = true) }) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(readiness.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(readiness.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard("7-day sets", readiness.weeklySetCount.toString(), Modifier.weight(1f))
                 StatCard(
                     "Last workout",
@@ -199,8 +367,20 @@ private fun ReadinessCard(readiness: DashboardReadiness, onStartWorkout: () -> U
                     Modifier.weight(1f)
                 )
             }
-            OutlinedButton(onClick = onStartWorkout, modifier = Modifier.fillMaxWidth()) {
-                Text("Open Workout")
+            Surface(
+                onClick = onStartWorkout,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                Text(
+                    "Open Workout",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
             }
         }
     }
@@ -208,21 +388,36 @@ private fun ReadinessCard(readiness: DashboardReadiness, onStartWorkout: () -> U
 
 @Composable
 private fun WorkoutSummaryCard(workoutSummary: DashboardWorkoutSummary, onStartWorkout: () -> Unit) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Workout Today", fontWeight = FontWeight.SemiBold)
-                    Text(workoutSummary.latestExerciseName?.let { "Latest: $it" } ?: "No workout logged yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text("${workoutSummary.workoutCount} workouts", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    SectionCard(
+        title = "Workout Today",
+        subtitle = workoutSummary.latestExerciseName?.let { "Latest: $it" } ?: "No workout logged yet.",
+        trailing = {
+            Text(
+                "${workoutSummary.workoutCount} workouts",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard("Sets", workoutSummary.setCount.toString(), Modifier.weight(1f))
                 StatCard("Volume", "${workoutSummary.volumeKg.roundToInt()} kg", Modifier.weight(1f))
             }
-            OutlinedButton(onClick = onStartWorkout, modifier = Modifier.fillMaxWidth()) {
-                Text("Start Workout")
+            Surface(
+                onClick = onStartWorkout,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Text(
+                    "Start Workout",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
             }
         }
     }
@@ -231,8 +426,8 @@ private fun WorkoutSummaryCard(workoutSummary: DashboardWorkoutSummary, onStartW
 @Composable
 private fun MicronutrientCard(micronutrients: List<NutrientAggregate>) {
     if (micronutrients.isEmpty()) {
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ModernCard {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SectionTitle("Micronutrients")
                 Text(
                     "Log foods with micronutrient data to see vitamin and mineral coverage against your targets.",
@@ -242,12 +437,13 @@ private fun MicronutrientCard(micronutrients: List<NutrientAggregate>) {
         }
         return
     }
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                SectionTitle("Micronutrients")
-                TagChip(text = "${micronutrients.count { it.percent >= 1f }}/${micronutrients.size} met")
-            }
+    SectionCard(
+        title = "Micronutrients",
+        trailing = {
+            TagChip(text = "${micronutrients.count { it.percent >= 1f }}/${micronutrients.size} met")
+        }
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             micronutrients.take(6).forEach { aggregate ->
                 LabeledProgress(
                     label = aggregate.label,
@@ -272,33 +468,73 @@ private fun MicronutrientCard(micronutrients: List<NutrientAggregate>) {
 
 @Composable
 private fun DailyCoachCard(coach: DashboardCoach) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(Modifier.weight(1f)) {
-                    Text(coach.title, fontWeight = FontWeight.SemiBold)
-                    Text(coach.summary)
+    GradientHeroCard(brush = BrandGradient) {
+        Column(verticalArrangement = Arrangement.spacedBy(FitNsDimens.SectionSpacing)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        coach.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Text(
+                        coach.summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                    )
                 }
-                Text("${coach.score}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                ProgressRing(
+                    progress = (coach.score / 100f).coerceIn(0f, 1f),
+                    modifier = Modifier.size(88.dp),
+                    stroke = 10.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.28f)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "${coach.score}",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
             }
-            LabeledProgress(label = "Day score", current = "${coach.score}/100", progress = coach.score / 100f)
-            Text(coach.focus, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f),
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                Text(
+                    coach.focus,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun MealBreakdownCard(meals: List<MealBreakdown>) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SectionTitle("Meal Balance")
+    SectionCard(title = "Meal Balance") {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             meals.forEach { meal ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(meal.label, fontWeight = FontWeight.SemiBold)
-                        Text("${meal.entryCount} items · Protein ${meal.proteinGrams.roundToInt()} g")
+                        Text("${meal.entryCount} items · Protein ${meal.proteinGrams.roundToInt()} g", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("${meal.caloriesKcal.roundToInt()} kcal")
+                    Text(
+                        "${meal.caloriesKcal.roundToInt()} kcal",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
@@ -306,32 +542,25 @@ private fun MealBreakdownCard(meals: List<MealBreakdown>) {
 }
 
 @Composable
-private fun MacroMetric(label: String, value: Double, target: Double, unit: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(label, fontWeight = FontWeight.SemiBold)
-                Text("${value.roundToInt()}/${target.roundToInt()} $unit", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            LabeledProgress(
-                label = "Goal",
-                current = "${(value / target * 100).roundToInt()}%",
-                progress = (value / target).toFloat()
-            )
-        }
-    }
-}
-
-@Composable
 private fun FoodEntryCard(entry: FoodLogEntry) {
-    Card {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    ModernCard {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(entry.name, fontWeight = FontWeight.SemiBold)
-                Text("${entry.nutrition.caloriesKcal.roundToInt()} kcal")
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(entry.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("${entry.grams.roundToInt()} g · ${entry.mealType}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(
+                    "${entry.nutrition.caloriesKcal.roundToInt()} kcal",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
-            Text("${entry.grams.roundToInt()} g · ${entry.mealType}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Protein ${entry.nutrition.proteinGrams.roundToInt()} g · Carbs ${entry.nutrition.carbohydratesGrams.roundToInt()} g · Fat ${entry.nutrition.fatGrams.roundToInt()} g")
+            Text(
+                "Protein ${entry.nutrition.proteinGrams.roundToInt()} g · Carbs ${entry.nutrition.carbohydratesGrams.roundToInt()} g · Fat ${entry.nutrition.fatGrams.roundToInt()} g",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

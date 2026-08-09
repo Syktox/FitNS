@@ -9,15 +9,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,12 +24,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.raysix.fitns.core.design.FitNsDimens
 import com.raysix.fitns.core.design.ScreenHeader
-import com.raysix.fitns.core.design.SectionTitle
+import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.domain.model.NutritionGoal
 import com.raysix.fitns.domain.model.UserProfile
 import com.raysix.fitns.domain.usecase.NutritionGoalEstimator
@@ -80,33 +82,47 @@ fun ProfileScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-        .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(FitNsDimens.ScreenPadding),
+        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
     ) {
         ScreenHeader(
             title = "Profile",
             subtitle = "Set goals that drive nutrition targets and progress tracking."
         )
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionTitle("Profile")
+        SectionCard(title = "Profile") {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NumericField(age, { age = it }, "Age", Modifier.weight(1f))
                     NumericField(trainingDays, { trainingDays = it }, "Training days", Modifier.weight(1f))
                 }
-                OutlinedTextField(physiology, { physiology = it }, label = { Text("Physiology") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    physiology, { physiology = it },
+                    label = { Text("Physiology") },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NumericField(height, { height = it }, "Height cm", Modifier.weight(1f))
                     NumericField(weight, { weight = it }, "Weight kg", Modifier.weight(1f))
                 }
                 NumericField(targetWeight, { targetWeight = it }, "Target weight kg")
-                OutlinedTextField(activity, { activity = it }, label = { Text("Activity level") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    activity, { activity = it },
+                    label = { Text("Activity level") },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
                 ChoiceChips(
                     options = listOf("Low", "Moderate", "High"),
                     selected = activity,
                     onSelected = { activity = it }
                 )
-                OutlinedTextField(goalName, { goalName = it }, label = { Text("Goal") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    goalName, { goalName = it },
+                    label = { Text("Goal") },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
                 ChoiceChips(
                     options = listOf("Maintain", "Lose Fat", "Build Muscle"),
                     selected = goalName,
@@ -114,32 +130,38 @@ fun ProfileScreen(
                 )
             }
         }
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    SectionTitle("Nutrition Goals")
-                    Button(
-                        onClick = {
-                            val estimate = NutritionGoalEstimator.estimate(
-                                weightKg = weight.toDoubleOrNull(),
-                                goal = goalName.ifBlank { "Maintain" },
-                                activityLevel = activity.ifBlank { "Moderate" }
-                            )
-                            calories = estimate.caloriesKcal.formatPlain()
-                            protein = estimate.proteinGrams.formatPlain()
-                            carbs = estimate.carbohydrateGrams.formatPlain()
-                            fat = estimate.fatGrams.formatPlain()
-                            fiber = estimate.fiberGrams.formatPlain()
-                            water = estimate.waterMilliliters.formatPlain()
-                        }
-                    ) {
-                        Text("Estimate")
-                    }
+        SectionCard(
+            title = "Nutrition Goals",
+            subtitle = "Estimates use body weight, activity, and goal. Adjust them after observing progress.",
+            trailing = {
+                Surface(
+                    onClick = {
+                        val estimate = NutritionGoalEstimator.estimate(
+                            weightKg = weight.toDoubleOrNull(),
+                            goal = goalName.ifBlank { "Maintain" },
+                            activityLevel = activity.ifBlank { "Moderate" }
+                        )
+                        calories = estimate.caloriesKcal.formatPlain()
+                        protein = estimate.proteinGrams.formatPlain()
+                        carbs = estimate.carbohydrateGrams.formatPlain()
+                        fat = estimate.fatGrams.formatPlain()
+                        fiber = estimate.fiberGrams.formatPlain()
+                        water = estimate.waterMilliliters.formatPlain()
+                    },
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Text(
+                        "Estimate",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                    )
                 }
-                Text(
-                    text = "Estimates use body weight, activity, and goal. Adjust them after observing progress.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 NumericField(calories, { calories = it }, "Calories kcal")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NumericField(protein, { protein = it }, "Protein g", Modifier.weight(1f))
@@ -153,12 +175,12 @@ fun ProfileScreen(
             }
         }
         uiState.statusMessage?.let {
-            Text(it, color = MaterialTheme.colorScheme.primary)
+            Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
         }
         uiState.errorMessage?.let {
-            Text(it, color = MaterialTheme.colorScheme.error)
+            Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
         }
-        Button(
+        Surface(
             onClick = {
                 onSave(
                     UserProfile(
@@ -181,23 +203,45 @@ fun ProfileScreen(
                     )
                 )
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(999.dp),
+            color = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
         ) {
-            Text("Save Profile")
+            Text(
+                "Save Profile",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(vertical = 14.dp)
+            )
         }
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("Quick Access")
-                OutlinedButton(onClick = onOpenWeight, modifier = Modifier.fillMaxWidth()) {
-                    Text("Weight Tracking")
-                }
-                OutlinedButton(onClick = onOpenTips, modifier = Modifier.fillMaxWidth()) {
-                    Text("Coaching Tips")
-                }
-                OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
-                    Text("Settings")
-                }
+        SectionCard(title = "Quick Access") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                QuickLink(text = "Weight Tracking", onClick = onOpenWeight)
+                QuickLink(text = "Coaching Tips", onClick = onOpenTips)
+                QuickLink(text = "Settings", onClick = onOpenSettings)
             }
+        }
+    }
+}
+
+@Composable
+private fun QuickLink(text: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        Row(
+            Modifier.padding(horizontal = 18.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -228,6 +272,7 @@ private fun NumericField(
         onValueChange = onValueChange,
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        shape = RoundedCornerShape(16.dp),
         modifier = modifier
     )
 }

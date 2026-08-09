@@ -19,9 +19,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -153,13 +152,22 @@ fun BarcodeScannerScreen(
                     color = Color.White,
                     textAlign = TextAlign.Center
                 )
-                Button(
+                Surface(
                     onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 16.dp)
                 ) {
-                    Text("Grant permission")
+                    Text(
+                        text = "Grant permission",
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 14.dp)
+                    )
                 }
             }
         }
@@ -168,16 +176,22 @@ fun BarcodeScannerScreen(
             modifier = Modifier
                 .align(Alignment.Center)
                 .size(280.dp)
-                .border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                .border(3.dp, Color.White, RoundedCornerShape(16.dp))
         )
 
-        OutlinedButton(
+        Surface(
             onClick = onCancel,
+            shape = RoundedCornerShape(50),
+            color = Color(0xCC2A2A2A),
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(16.dp)
         ) {
-            Text("Cancel")
+            Text(
+                text = "Cancel",
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+            )
         }
 
         Text(

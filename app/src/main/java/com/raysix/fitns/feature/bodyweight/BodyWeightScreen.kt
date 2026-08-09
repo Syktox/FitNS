@@ -8,15 +8,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,13 +24,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.raysix.fitns.core.design.BrandGradient
 import com.raysix.fitns.core.design.EmptyStateCard
+import com.raysix.fitns.core.design.FitNsDimens
+import com.raysix.fitns.core.design.GradientHeroCard
+import com.raysix.fitns.core.design.ModernCard
+import com.raysix.fitns.core.design.ProgressRing
 import com.raysix.fitns.core.design.ScreenHeader
+import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.SectionTitle
 import com.raysix.fitns.domain.model.BodyWeightLogEntry
 import java.time.Instant
@@ -74,8 +83,8 @@ fun BodyWeightScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(FitNsDimens.ScreenPadding),
+        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
     ) {
         item {
             ScreenHeader(
@@ -84,50 +93,21 @@ fun BodyWeightScreen(
             )
         }
         item {
-            Card {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("New Entry", fontWeight = FontWeight.SemiBold)
-                    OutlinedTextField(
-                        value = weight,
-                        onValueChange = { weight = it },
-                        label = { Text("Weight kg") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        label = { Text("Notes") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Button(
-                        onClick = {
-                            onAddEntry(weight.toDoubleOrNull() ?: 0.0, notes)
-                            weight = ""
-                            notes = ""
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Save")
-                    }
-                    uiState.errorMessage?.let { message ->
-                        Text(message, color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            }
+            NewEntryCard(
+                weight = weight,
+                onWeightChange = { weight = it },
+                notes = notes,
+                onNotesChange = { notes = it },
+                onSave = {
+                    onAddEntry(weight.toDoubleOrNull() ?: 0.0, notes)
+                    weight = ""
+                    notes = ""
+                },
+                errorMessage = uiState.errorMessage
+            )
         }
         item {
-            Card {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SectionTitle("Trend")
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        TrendMetric("Current", uiState.progress.currentKg?.formatKg() ?: "No data")
-                        TrendMetric("7-day avg", uiState.sevenDayAverageKg?.formatKg() ?: "No data")
-                        TrendMetric("Entries", uiState.entries.size.toString())
-                    }
-                    BodyWeightTrendChart(entries = uiState.entries)
-                }
-            }
+            TrendSummaryCard(uiState)
         }
         item {
             WeightProgressCard(progress = uiState.progress)
@@ -147,61 +127,189 @@ fun BodyWeightScreen(
 }
 
 @Composable
-private fun WeightProgressCard(progress: BodyWeightProgress) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SectionTitle("Goal Progress")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Current")
-                Text(progress.currentKg?.formatKg() ?: "No data")
+private fun NewEntryCard(
+    weight: String,
+    onWeightChange: (String) -> Unit,
+    notes: String,
+    onNotesChange: (String) -> Unit,
+    onSave: () -> Unit,
+    errorMessage: String?
+) {
+    SectionCard(title = "New Entry") {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(
+                value = weight,
+                onValueChange = onWeightChange,
+                label = { Text("Weight kg") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = notes,
+                onValueChange = onNotesChange,
+                label = { Text("Notes") },
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Surface(
+                onClick = onSave,
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "Save",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 13.dp)
+                )
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Target")
-                Text(progress.targetKg?.formatKg() ?: "Not set")
+            errorMessage?.let { message ->
+                Text(message, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("30-day change")
-                Text(progress.thirtyDayChangeKg?.formatSignedKg() ?: "No data")
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Total change")
-                Text(progress.totalChangeKg?.formatSignedKg() ?: "No data")
-            }
-            Text(progress.summary, color = MaterialTheme.colorScheme.primary)
         }
+    }
+}
+
+@Composable
+private fun TrendSummaryCard(uiState: BodyWeightUiState) {
+    val progress = uiState.progress
+    val percent = if (progress.currentKg != null && progress.targetKg != null) {
+        val change = kotlin.math.abs(progress.totalChangeKg ?: 0.0)
+        val remaining = kotlin.math.abs(progress.remainingToTargetKg ?: 0.0)
+        if (change + remaining <= 0.0) 1f else (change / (change + remaining)).toFloat()
+    } else {
+        0f
+    }
+    GradientHeroCard(brush = BrandGradient) {
+        val onPrimary = MaterialTheme.colorScheme.onPrimary
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text("Trend", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = onPrimary.copy(alpha = 0.85f))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    TrendHeroMetric("Current", uiState.progress.currentKg?.formatKg() ?: "No data", onPrimary, Modifier.weight(1f))
+                    TrendHeroMetric("7-day avg", uiState.sevenDayAverageKg?.formatKg() ?: "No data", onPrimary, Modifier.weight(1f))
+                    TrendHeroMetric("Entries", uiState.entries.size.toString(), onPrimary, Modifier.weight(1f))
+                }
+            }
+            ProgressRing(
+                progress = percent,
+                modifier = Modifier.size(84.dp),
+                stroke = 10.dp,
+                color = onPrimary,
+                trackColor = onPrimary.copy(alpha = 0.28f)
+            ) {
+                Text(
+                    "${(percent * 100).roundToInt()}%",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = onPrimary
+                )
+            }
+        }
+        BodyWeightTrendChart(entries = uiState.entries, onPrimary = onPrimary, track = onPrimary.copy(alpha = 0.28f))
+    }
+}
+
+@Composable
+private fun TrendHeroMetric(label: String, value: String, onPrimary: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = onPrimary.copy(alpha = 0.85f))
+        Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = onPrimary)
+    }
+}
+
+@Composable
+private fun WeightProgressCard(progress: BodyWeightProgress) {
+    SectionCard(title = "Goal Progress") {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            GoalRow("Current", progress.currentKg?.formatKg() ?: "No data")
+            GoalRow("Target", progress.targetKg?.formatKg() ?: "Not set")
+            GoalRow("30-day change", progress.thirtyDayChangeKg?.formatSignedKg() ?: "No data")
+            GoalRow("Total change", progress.totalChangeKg?.formatSignedKg() ?: "No data")
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Text(
+                    progress.summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GoalRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontWeight = FontWeight.Medium)
+        Text(
+            value,
+            fontWeight = FontWeight.Bold,
+            color = if (value.startsWith("+") || value.startsWith("-")) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            }
+        )
     }
 }
 
 @Composable
 private fun BodyWeightEntryCard(entry: BodyWeightLogEntry, onDelete: () -> Unit) {
-    Card {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    ModernCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(entry.measuredAt.formatDate(), fontWeight = FontWeight.SemiBold)
-                Text(entry.weightKg.formatKg())
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(entry.measuredAt.formatDate(), fontWeight = FontWeight.SemiBold)
+                    if (entry.notes.isNotBlank()) {
+                        Text(entry.notes, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                Text(
+                    entry.weightKg.formatKg(),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
-            if (entry.notes.isNotBlank()) {
-                Text(entry.notes)
-            }
-            OutlinedButton(onClick = onDelete) {
-                Text("Delete")
+            Surface(
+                onClick = onDelete,
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.error
+            ) {
+                Text(
+                    "Delete",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp)
+                )
             }
         }
     }
 }
 
 @Composable
-private fun TrendMetric(label: String, value: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontWeight = FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun BodyWeightTrendChart(entries: List<BodyWeightLogEntry>) {
-    val lineColor = MaterialTheme.colorScheme.primary
-    val guideColor = MaterialTheme.colorScheme.outlineVariant
+private fun BodyWeightTrendChart(
+    entries: List<BodyWeightLogEntry>,
+    onPrimary: androidx.compose.ui.graphics.Color,
+    track: androidx.compose.ui.graphics.Color
+) {
+    val guideColor = track
     val points = entries
         .asReversed()
         .takeLast(30)
@@ -218,7 +326,8 @@ private fun BodyWeightTrendChart(entries: List<BodyWeightLogEntry>) {
                 color = guideColor,
                 start = Offset(0f, size.height / 2f),
                 end = Offset(size.width, size.height / 2f),
-                strokeWidth = 2f
+                strokeWidth = 3f,
+                cap = StrokeCap.Round
             )
             return@Canvas
         }
@@ -237,18 +346,20 @@ private fun BodyWeightTrendChart(entries: List<BodyWeightLogEntry>) {
             color = guideColor,
             start = Offset(0f, size.height),
             end = Offset(size.width, size.height),
-            strokeWidth = 1f
+            strokeWidth = 2f,
+            cap = StrokeCap.Round
         )
         coordinates.zipWithNext().forEach { (start, end) ->
             drawLine(
-                color = lineColor,
+                color = onPrimary,
                 start = start,
                 end = end,
-                strokeWidth = 4f
+                strokeWidth = 5f,
+                cap = StrokeCap.Round
             )
         }
         coordinates.forEach { point ->
-            drawCircle(color = lineColor, radius = 5f, center = point)
+            drawCircle(color = onPrimary, radius = 6f, center = point)
         }
     }
 }

@@ -8,21 +8,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,10 +30,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.raysix.fitns.core.design.BrandGradient
+import com.raysix.fitns.core.design.EmptyStateCard
+import com.raysix.fitns.core.design.FitNsDimens
+import com.raysix.fitns.core.design.GradientHeroCard
+import com.raysix.fitns.core.design.ModernCard
+import com.raysix.fitns.core.design.ProgressRing
+import com.raysix.fitns.core.design.SectionCard
+import com.raysix.fitns.core.design.SectionTitle
+import com.raysix.fitns.core.design.StatCard
+import com.raysix.fitns.core.design.TagChip
 import com.raysix.fitns.domain.model.Exercise
 import com.raysix.fitns.domain.model.WorkoutLogEntry
 import com.raysix.fitns.domain.model.WorkoutPlan
@@ -92,17 +103,27 @@ fun WorkoutStartScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(FitNsDimens.ScreenPadding),
+        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
     ) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("Start Workout", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Fast entry for machines and exercises")
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Start Workout", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text("Fast entry for machines and exercises", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                OutlinedButton(onClick = onShowHistory) {
-                    Text("History")
+                Surface(
+                    onClick = onShowHistory,
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ) {
+                    Text(
+                        "History",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp)
+                    )
                 }
             }
         }
@@ -111,10 +132,12 @@ fun WorkoutStartScreen(
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Saved Plans", fontWeight = FontWeight.SemiBold)
-                OutlinedButton(onClick = { showPlanBuilder = !showPlanBuilder }) {
-                    Text(if (showPlanBuilder) "Close" else "Create Plan")
-                }
+                SectionTitle("Saved Plans")
+                ActionPill(
+                    text = if (showPlanBuilder) "Close" else "Create Plan",
+                    filled = !showPlanBuilder,
+                    onClick = { showPlanBuilder = !showPlanBuilder }
+                )
             }
         }
         if (showPlanBuilder) {
@@ -209,7 +232,7 @@ fun WorkoutStartScreen(
         }
         if (uiState.templates.isNotEmpty()) {
             item {
-                Text("Workout Templates", fontWeight = FontWeight.SemiBold)
+                SectionTitle("Workout Templates")
             }
             item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -247,40 +270,45 @@ fun WorkoutStartScreen(
             }
         }
         item {
-            Card {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Exercises", fontWeight = FontWeight.SemiBold)
-                        OutlinedButton(onClick = { showAddExercise = !showAddExercise }) {
-                            Text(if (showAddExercise) "Close" else "Add Exercise")
-                        }
-                    }
-                    if (showAddExercise) {
+            SectionCard(title = "Exercises", subtitle = "${uiState.exercises.size} saved exercises", trailing = {
+                ActionPill(
+                    text = if (showAddExercise) "Close" else "Add Exercise",
+                    filled = !showAddExercise,
+                    onClick = { showAddExercise = !showAddExercise }
+                )
+            }) {
+                if (showAddExercise) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedTextField(
                             value = exerciseName,
                             onValueChange = { exerciseName = it },
                             label = { Text("Exercise name") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp)
                         )
                         OutlinedTextField(
                             value = muscleGroup,
                             onValueChange = { muscleGroup = it },
                             label = { Text("Muscle group") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp)
                         )
                         OutlinedTextField(
                             value = equipmentType,
                             onValueChange = { equipmentType = it },
                             label = { Text("Equipment type") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp)
                         )
                         OutlinedTextField(
                             value = gym,
                             onValueChange = { gym = it },
                             label = { Text("Gym") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp)
                         )
-                        Button(
+                        PrimaryPillButton(
+                            text = "Save Exercise",
                             onClick = {
                                 onAddExercise(exerciseName, muscleGroup, equipmentType, gym)
                                 exerciseName = ""
@@ -288,23 +316,16 @@ fun WorkoutStartScreen(
                                 equipmentType = "Machine"
                                 gym = ""
                                 showAddExercise = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Save Exercise")
-                        }
+                            }
+                        )
                     }
                 }
             }
         }
         if (uiState.errorMessage != null) {
             item {
-                Card {
-                    Text(
-                        text = uiState.errorMessage,
-                        modifier = Modifier.padding(14.dp),
-                        color = MaterialTheme.colorScheme.error
-                    )
+                ModernCard(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
+                    Text(uiState.errorMessage, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -321,9 +342,8 @@ fun WorkoutStartScreen(
             )
         }
         item {
-            Card {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(selectedExercise?.name ?: "Choose exercise", fontWeight = FontWeight.SemiBold)
+            SectionCard(title = selectedExercise?.name ?: "Choose exercise", subtitle = "Weight, reps, and machine notes") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     NumericField(value = weight, onValueChange = { weight = it }, label = "Weight kg")
                     NumericField(value = reps, onValueChange = { reps = it }, label = "Reps")
                     NumericField(value = sets, onValueChange = { sets = it }, label = "Sets")
@@ -332,9 +352,11 @@ fun WorkoutStartScreen(
                         value = notes,
                         onValueChange = { notes = it },
                         label = { Text("Machine settings / notes") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp)
                     )
-                    Button(
+                    PrimaryPillButton(
+                        text = "Save Set",
                         onClick = {
                             selectedExercise?.let { exercise ->
                                 onAddWorkout(
@@ -348,11 +370,8 @@ fun WorkoutStartScreen(
                                 notes = ""
                                 restSeconds = 90
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Save Set")
-                    }
+                        }
+                    )
                 }
             }
         }
@@ -374,22 +393,42 @@ private fun RestTimerCard(
     onAddTime: () -> Unit,
     onReset: () -> Unit
 ) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Rest Timer", fontWeight = FontWeight.SemiBold)
-                Text(seconds.formatTimer(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+    val target = 90
+    val progress = if (seconds in 1..target) seconds.toFloat() / target else 0f
+    SectionCard(
+        title = "Rest Timer",
+        subtitle = if (seconds > 0) "Resting between sets" else "Pause after each set",
+        trailing = {
+            ActionPill(
+                text = if (seconds > 0) "Reset" else "Start 90s",
+                filled = seconds > 0,
+                onClick = if (seconds > 0) onReset else onStart
+            )
+        }
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ProgressRing(
+                progress = progress,
+                modifier = Modifier.size(96.dp),
+                stroke = 11.dp,
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        seconds.formatTimer(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (seconds > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onStart) {
-                    Text(if (seconds > 0) "Restart 90s" else "Start 90s")
-                }
-                OutlinedButton(onClick = onAddTime, enabled = seconds > 0) {
-                    Text("+30s")
-                }
-                OutlinedButton(onClick = onReset, enabled = seconds > 0) {
-                    Text("Reset")
-                }
+            Column(
+                Modifier.weight(1f).padding(start = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ActionPill(text = if (seconds > 0) "Restart 90s" else "Start 90s", filled = true, onClick = onStart)
+                ActionPill(text = "+30s", filled = false, onClick = onAddTime, enabled = seconds > 0)
             }
         }
     }
@@ -397,15 +436,14 @@ private fun RestTimerCard(
 
 @Composable
 private fun WeeklyTrainingCard(stats: WorkoutWeeklyStats) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("This Week", fontWeight = FontWeight.SemiBold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${stats.workoutCount} workouts")
-                Text("${stats.setCount} sets")
-                Text("${stats.volumeKg.roundToInt()} kg")
-            }
-            Text(stats.topExercise?.let { "Top exercise: $it" } ?: "Log a workout to build your weekly trend.")
+    SectionCard(
+        title = "This Week",
+        subtitle = stats.topExercise?.let { "Top exercise: $it" } ?: "Log a workout to build your weekly trend."
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatCard("Workouts", stats.workoutCount.toString(), Modifier.weight(1f))
+            StatCard("Sets", stats.setCount.toString(), Modifier.weight(1f))
+            StatCard("Volume", "${stats.volumeKg.roundToInt()} kg", Modifier.weight(1f))
         }
     }
 }
@@ -430,20 +468,22 @@ private fun PlanBuilderCard(
     onRestSecondsChange: (String) -> Unit,
     onSave: () -> Unit
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Plan Builder", fontWeight = FontWeight.SemiBold)
+    ModernCard(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
+        Column(verticalArrangement = Arrangement.spacedBy(FitNsDimens.SectionSpacing)) {
+            Text("Plan Builder", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             OutlinedTextField(
                 value = planName,
                 onValueChange = onPlanNameChange,
                 label = { Text("Plan name") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)
             )
             OutlinedTextField(
                 value = planFocus,
                 onValueChange = onPlanFocusChange,
                 label = { Text("Focus") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 exercises.forEach { exercise ->
@@ -462,13 +502,11 @@ private fun PlanBuilderCard(
                 NumericField(value = targetRepMax, onValueChange = onTargetRepMaxChange, label = "Max reps", modifier = Modifier.weight(1f))
                 NumericField(value = restSeconds, onValueChange = onRestSecondsChange, label = "Rest sec", modifier = Modifier.weight(1f))
             }
-            Button(
-                onClick = onSave,
+            PrimaryPillButton(
+                text = "Save Plan",
                 enabled = selectedExerciseIds.isNotEmpty() && planName.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Save Plan")
-            }
+                onClick = onSave
+            )
         }
     }
 }
@@ -480,19 +518,26 @@ private fun WorkoutPlanCard(
     onStart: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-        )
+    ModernCard(
+        containerColor = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(plan.name, fontWeight = FontWeight.SemiBold)
+                    Text(plan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(plan.focus, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${plan.exercises.size} exercises · ${plan.estimatedMinutes} min")
+                    Text("${plan.exercises.size} exercises · ${plan.estimatedMinutes} min", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text(if (selected) "Active" else "Saved", fontWeight = FontWeight.Medium)
+                TagChip(text = if (selected) "Active" else "Saved", accent = selected)
             }
             Text(
                 text = plan.exercises.joinToString { "${it.exercise.name} ${it.targetSets}x${it.targetRepMin}-${it.targetRepMax}" },
@@ -501,12 +546,8 @@ private fun WorkoutPlanCard(
                 maxLines = 2
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onStart) {
-                    Text(if (selected) "Resume" else "Start")
-                }
-                OutlinedButton(onClick = onDelete) {
-                    Text("Delete")
-                }
+                ActionPill(text = if (selected) "Resume" else "Start", filled = true, onClick = onStart)
+                ActionPill(text = "Delete", filled = false, onClick = onDelete)
             }
         }
     }
@@ -520,33 +561,53 @@ private fun ActivePlanCard(
     onChooseExercise: (WorkoutPlanExercise) -> Unit
 ) {
     val progress = if (plan.exercises.isEmpty()) 0f else completedExerciseIds.size.toFloat() / plan.exercises.size
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    GradientHeroCard(brush = BrandGradient) {
+        val onPrimary = MaterialTheme.colorScheme.onPrimary
+        Column(verticalArrangement = Arrangement.spacedBy(FitNsDimens.SectionSpacing)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column(Modifier.weight(1f)) {
-                    Text("Active Plan", fontWeight = FontWeight.SemiBold)
-                    Text(plan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Active Plan", style = MaterialTheme.typography.labelMedium, color = onPrimary.copy(alpha = 0.85f))
+                    Text(plan.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = onPrimary)
                 }
-                Text("${completedExerciseIds.size}/${plan.exercises.size}")
+                ProgressRing(
+                    progress = progress,
+                    modifier = Modifier.size(64.dp),
+                    stroke = 8.dp,
+                    color = onPrimary,
+                    trackColor = onPrimary.copy(alpha = 0.28f)
+                ) {
+                    Text(
+                        "${completedExerciseIds.size}/${plan.exercises.size}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = onPrimary
+                    )
+                }
             }
-            LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+                color = onPrimary,
+                trackColor = onPrimary.copy(alpha = 0.28f)
+            )
             plan.exercises.forEachIndexed { index, item ->
                 val completed = item.exercise.id in completedExerciseIds
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("${index + 1}. ${item.exercise.name}", fontWeight = FontWeight.Medium)
+                        Text(
+                            "${index + 1}. ${item.exercise.name}",
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (completed) onPrimary.copy(alpha = 0.6f) else onPrimary
+                        )
                         Text(
                             "${item.targetSets} sets · ${item.targetRepMin}-${item.targetRepMax} reps · ${item.restSeconds}s rest",
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodySmall,
+                            color = onPrimary.copy(alpha = 0.85f)
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedButton(onClick = { onChooseExercise(item) }) {
-                            Text("Log")
-                        }
-                        OutlinedButton(onClick = { onToggleComplete(item.exercise) }) {
-                            Text(if (completed) "Done" else "Mark")
-                        }
+                        HeroPillSmall(text = "Log", filled = true, onClick = { onChooseExercise(item) })
+                        HeroPillSmall(text = if (completed) "Done" else "Mark", filled = false, onClick = { onToggleComplete(item.exercise) })
                     }
                 }
             }
@@ -561,33 +622,32 @@ private fun WorkoutTemplateCard(
     onClick: () -> Unit,
     onSave: () -> Unit
 ) {
-    Card(
-        onClick = onClick,
+    ModernCard(
         modifier = Modifier.width(260.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-        )
+        containerColor = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(template.name, fontWeight = FontWeight.SemiBold)
-            Text(template.focus, style = MaterialTheme.typography.bodyMedium)
-            Text("${template.exercises.size} exercises · ${template.estimatedMinutes} min")
+            Text(template.focus, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${template.exercises.size} exercises · ${template.estimatedMinutes} min", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 text = template.exercises.joinToString { it.name },
                 style = MaterialTheme.typography.bodySmall,
-                maxLines = 2
+                maxLines = 2,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onClick) {
-                    Text("Preview")
-                }
-                OutlinedButton(onClick = onSave) {
-                    Text("Save")
-                }
+                ActionPill(text = "Preview", filled = false, onClick = onClick)
+                ActionPill(text = "Save", filled = true, onClick = onSave)
             }
         }
     }
@@ -598,18 +658,15 @@ private fun ActiveTemplateCard(
     template: WorkoutTemplate,
     onChooseExercise: (Exercise) -> Unit
 ) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Plan: ${template.name}", fontWeight = FontWeight.SemiBold)
+    SectionCard(title = "Plan: ${template.name}") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             template.exercises.forEachIndexed { index, exercise ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column {
-                        Text("${index + 1}. ${exercise.name}", fontWeight = FontWeight.Medium)
-                        Text(exercise.muscleGroup, style = MaterialTheme.typography.bodySmall)
+                    Column(Modifier.weight(1f)) {
+                        Text("${index + 1}. ${exercise.name}", fontWeight = FontWeight.SemiBold)
+                        Text(exercise.muscleGroup, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    OutlinedButton(onClick = { onChooseExercise(exercise) }) {
-                        Text("Log")
-                    }
+                    ActionPill(text = "Log", filled = true, onClick = { onChooseExercise(exercise) })
                 }
             }
         }
@@ -650,11 +707,11 @@ fun WorkoutHistoryScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(FitNsDimens.ScreenPadding),
+        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
     ) {
         item {
-            Text("Workout History", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("Workout History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         }
         if (history.isEmpty()) {
             item {
@@ -665,22 +722,26 @@ fun WorkoutHistoryScreen(
             }
         }
         items(history) { workout ->
-            Card {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            ModernCard {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(workout.exercise.name, fontWeight = FontWeight.SemiBold)
-                        Text(workout.loggedAt.formatDate())
+                        Text(workout.exercise.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(workout.loggedAt.formatDate(), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     workout.sets.firstOrNull()?.let { set ->
-                        Text("${set.weightKg.roundToInt()} kg x ${set.repetitions} reps x ${set.sets} sets")
+                        Text(
+                            "${set.weightKg.roundToInt()} kg x ${set.repetitions} reps x ${set.sets} sets",
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
-                    Text("Volume: ${workout.volumeKg.roundToInt()} kg")
-                    Text(progressionHint(workout))
+                    Text("Volume: ${workout.volumeKg.roundToInt()} kg", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(progressionHint(workout), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (workout.notes.isNotBlank()) {
                         Text(workout.notes)
                     }
-                    OutlinedButton(onClick = { pendingDelete = workout }) {
-                        Text("Delete")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ActionPill(text = "Delete", filled = false, onClick = { pendingDelete = workout }, danger = true)
                     }
                 }
             }
@@ -689,28 +750,107 @@ fun WorkoutHistoryScreen(
 }
 
 @Composable
-private fun EmptyStateCard(title: String, message: String) {
-    Card {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, fontWeight = FontWeight.SemiBold)
-            Text(message)
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ExerciseCard(exercise: Exercise, selected: Boolean, onClick: () -> Unit) {
+    ModernCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+        containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(exercise.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                TagChip(text = if (selected) "Active" else exercise.muscleGroup, accent = selected)
+            }
+            Text(
+                "Last workout: ${exercise.lastWeightKg?.roundToInt() ?: 0} kg x ${exercise.lastRepetitions ?: 0} x ${exercise.lastSets ?: 0}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text("Personal best: ${exercise.personalBestKg?.roundToInt() ?: 0} kg · Est. 1RM: ${exercise.estimatedOneRepMax()} kg", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                exercise.nextTarget(),
+                fontWeight = FontWeight.SemiBold,
+                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun ExerciseCard(exercise: Exercise, selected: Boolean, onClick: () -> Unit) {
-    Card(onClick = onClick) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(exercise.name, fontWeight = FontWeight.SemiBold)
-                Text(if (selected) "Active" else exercise.muscleGroup)
-            }
-            Text("Last workout: ${exercise.lastWeightKg?.roundToInt() ?: 0} kg x ${exercise.lastRepetitions ?: 0} x ${exercise.lastSets ?: 0}")
-            Text("Personal best: ${exercise.personalBestKg?.roundToInt() ?: 0} kg")
-            Text("Est. 1RM: ${exercise.estimatedOneRepMax()} kg · ${exercise.nextTarget()}")
-        }
+private fun ActionPill(
+    text: String,
+    filled: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    danger: Boolean = false
+) {
+    val color = when {
+        danger -> MaterialTheme.colorScheme.error
+        filled -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(999.dp),
+        color = if (filled) color else MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = if (filled) MaterialTheme.colorScheme.onPrimary else color
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+        )
+    }
+}
+
+@Composable
+private fun HeroPillSmall(text: String, filled: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(999.dp),
+        color = if (filled) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.14f)
+        },
+        contentColor = if (filled) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onPrimary
+        },
+        border = if (filled) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+        )
+    }
+}
+
+@Composable
+private fun PrimaryPillButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 13.dp)
+        )
     }
 }
 
@@ -721,6 +861,7 @@ private fun NumericField(value: String, onValueChange: (String) -> Unit, label: 
         onValueChange = onValueChange,
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        shape = RoundedCornerShape(16.dp),
         modifier = modifier
     )
 }

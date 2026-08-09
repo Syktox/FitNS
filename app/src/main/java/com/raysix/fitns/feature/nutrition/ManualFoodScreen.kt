@@ -9,15 +9,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,9 +28,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.raysix.fitns.core.design.FitNsDimens
 import com.raysix.fitns.core.design.ScreenHeader
-import com.raysix.fitns.core.design.SectionTitle
+import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.domain.model.DataQuality
 import com.raysix.fitns.domain.model.MealType
 import com.raysix.fitns.domain.model.Micronutrients
@@ -105,8 +107,8 @@ fun ManualFoodScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(FitNsDimens.ScreenPadding),
+        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
     ) {
         ScreenHeader(
             title = "Add Food",
@@ -118,23 +120,19 @@ fun ManualFoodScreen(
             onLookup = onLookupBarcode,
             onScanBarcode = onScanBarcode
         )
-        Card {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Nutrition label", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Photograph the nutrition table to fill in the values. OCR results are a draft and must be reviewed.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedButton(onClick = onScanLabel, modifier = Modifier.fillMaxWidth()) {
-                    Text("Scan nutrition label")
-                }
+        SectionCard(title = "Nutrition label", subtitle = "Photograph the nutrition table to fill in the values. OCR results are a draft and must be reviewed.") {
+            OutlinedButton(
+                onClick = onScanLabel,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(999.dp)
+            ) {
+                Text("Scan nutrition label")
             }
         }
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionTitle("Product")
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = brand, onValueChange = { brand = it }, label = { Text("Brand") }, modifier = Modifier.fillMaxWidth())
+        SectionCard(title = "Product") {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = brand, onValueChange = { brand = it }, label = { Text("Brand") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
                 NumericField(value = grams, onValueChange = { grams = it }, label = "Amount in grams")
                 PortionPresetChips(
                     currentGrams = grams,
@@ -142,9 +140,8 @@ fun ManualFoodScreen(
                 )
             }
         }
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionTitle("Nutrition per serving")
+        SectionCard(title = "Nutrition per serving") {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 NumericField(value = calories, onValueChange = { calories = it }, label = "Calories")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NumericField(value = protein, onValueChange = { protein = it }, label = "Protein g", modifier = Modifier.weight(1f))
@@ -164,9 +161,8 @@ fun ManualFoodScreen(
                 }
             }
         }
-        Card {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionTitle("Meal")
+        SectionCard(title = "Meal") {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf(MealType.Breakfast, MealType.Lunch, MealType.Dinner, MealType.Snack).forEach { type ->
                         FilterChip(
@@ -176,11 +172,11 @@ fun ManualFoodScreen(
                         )
                     }
                 }
-                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
+            Surface(
                 onClick = {
                     onSave(
                         ManualFoodInput(
@@ -201,11 +197,23 @@ fun ManualFoodScreen(
                         )
                     )
                 },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
-                Text("Save")
+                Text(
+                    "Save",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 13.dp)
+                )
             }
-            OutlinedButton(onClick = onCancel) {
+            OutlinedButton(
+                onClick = onCancel,
+                shape = RoundedCornerShape(999.dp)
+            ) {
                 Text("Cancel")
             }
         }
@@ -234,24 +242,34 @@ private fun BarcodeLookupCard(
     onLookup: () -> Unit,
     onScanBarcode: () -> Unit
 ) {
-    Card {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Barcode Lookup", fontWeight = FontWeight.SemiBold)
+    SectionCard(title = "Barcode Lookup") {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(
                 value = state.barcode,
                 onValueChange = onBarcodeChange,
                 label = { Text("Barcode") },
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             )
-            Button(
+            Surface(
                 onClick = onLookup,
                 enabled = !state.loading,
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (state.loading) "Looking up..." else "Lookup product")
+                Text(
+                    if (state.loading) "Looking up..." else "Lookup product",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
             }
             OutlinedButton(
                 onClick = onScanBarcode,
+                shape = RoundedCornerShape(999.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Scan barcode with camera")
@@ -282,6 +300,7 @@ private fun NumericField(
         onValueChange = onValueChange,
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        shape = RoundedCornerShape(16.dp),
         modifier = modifier
     )
 }

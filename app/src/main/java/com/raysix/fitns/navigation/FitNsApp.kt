@@ -1,25 +1,38 @@
 package com.raysix.fitns.navigation
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.outlined.DocumentScanner
+import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.MonitorWeight
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -27,8 +40,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
 import com.raysix.fitns.feature.bodyweight.BodyWeightScreen
 import com.raysix.fitns.feature.bodyweight.BodyWeightViewModel
 import com.raysix.fitns.feature.dashboard.DashboardScreen
@@ -51,20 +62,25 @@ import com.raysix.fitns.feature.workout.WorkoutHistoryScreen
 import com.raysix.fitns.feature.workout.WorkoutStartScreen
 import com.raysix.fitns.feature.workout.WorkoutViewModel
 
-private enum class Route(val value: String, val label: String, val icon: ImageVector) {
-    Onboarding("onboarding", "Get Started", Icons.Outlined.Person),
-    Dashboard("dashboard", "Today", Icons.Outlined.Home),
-    Nutrition("nutrition", "Nutrition", Icons.Outlined.Restaurant),
-    AddFood("add-food", "Add", Icons.Outlined.Restaurant),
-    LabelScan("label-scan", "Label", Icons.Outlined.DocumentScanner),
-    BarcodeScan("barcode-scan", "Barcode", Icons.Outlined.QrCodeScanner),
-    Workout("workout", "Workout", Icons.Outlined.FitnessCenter),
-    BodyWeight("bodyweight", "Weight", Icons.Outlined.MonitorWeight),
-    Progress("progress", "Progress", Icons.AutoMirrored.Outlined.ShowChart),
-    Recommendations("recommendations", "Tips", Icons.Outlined.Lightbulb),
-    History("history", "History", Icons.Outlined.FitnessCenter),
-    Profile("profile", "Profile", Icons.Outlined.Person),
-    Settings("settings", "Settings", Icons.Outlined.Settings)
+private enum class Route(
+    val value: String,
+    val label: String,
+    val icon: ImageVector,
+    val selectedIcon: ImageVector
+) {
+    Onboarding("onboarding", "Get Started", Icons.Outlined.Person, Icons.Filled.Person),
+    Dashboard("dashboard", "Today", Icons.Outlined.Home, Icons.Filled.Home),
+    Nutrition("nutrition", "Nutrition", Icons.Outlined.Restaurant, Icons.Filled.Restaurant),
+    AddFood("add-food", "Add", Icons.Outlined.Restaurant, Icons.Filled.Restaurant),
+    LabelScan("label-scan", "Label", Icons.Outlined.DocumentScanner, Icons.Outlined.DocumentScanner),
+    BarcodeScan("barcode-scan", "Barcode", Icons.Outlined.QrCodeScanner, Icons.Outlined.QrCodeScanner),
+    Workout("workout", "Workout", Icons.Outlined.FitnessCenter, Icons.Filled.FitnessCenter),
+    BodyWeight("bodyweight", "Weight", Icons.Outlined.MonitorWeight, Icons.Outlined.MonitorWeight),
+    Progress("progress", "Progress", Icons.AutoMirrored.Outlined.ShowChart, Icons.AutoMirrored.Filled.ShowChart),
+    Recommendations("recommendations", "Tips", Icons.Outlined.Lightbulb, Icons.Outlined.Lightbulb),
+    History("history", "History", Icons.Outlined.FitnessCenter, Icons.Filled.FitnessCenter),
+    Profile("profile", "Profile", Icons.Outlined.Person, Icons.Filled.Person),
+    Settings("settings", "Settings", Icons.Outlined.Settings, Icons.Outlined.Settings)
 }
 
 @Composable
@@ -75,31 +91,61 @@ fun FitNsApp() {
     val onOnboarding = currentDestination?.route == Route.Onboarding.value
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (!onOnboarding) {
-                NavigationBar {
-                    bottomRoutes.forEach { route ->
-                        NavigationBarItem(
-                            selected = currentDestination?.hierarchy?.any { destination ->
-                                destination.route == route.value
-                            } == true,
-                            onClick = {
-                                navController.navigate(route.value) {
-                                    launchSingleTop = true
-                                    restoreState = true
-                                    popUpTo(Route.Dashboard.value) {
-                                        saveState = true
-                                    }
-                                }
-                            },
-                            label = { Text(route.label) },
-                            icon = {
-                                Icon(
-                                    imageVector = route.icon,
-                                    contentDescription = route.label
+                Box(
+                    Modifier
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 16.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(32.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        tonalElevation = 3.dp,
+                        shadowElevation = 12.dp
+                    ) {
+                        NavigationBar(
+                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                            tonalElevation = 0.dp
+                        ) {
+                            bottomRoutes.forEach { route ->
+                                val selected = currentDestination?.hierarchy?.any { destination ->
+                                    destination.route == route.value
+                                } == true
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = {
+                                        navController.navigate(route.value) {
+                                            launchSingleTop = true
+                                            restoreState = true
+                                            popUpTo(Route.Dashboard.value) {
+                                                saveState = true
+                                            }
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            route.label,
+                                            maxLines = 1
+                                        )
+                                    },
+                                    icon = {
+                                        Icon(
+                                            imageVector = if (selected) route.selectedIcon else route.icon,
+                                            contentDescription = route.label
+                                        )
+                                    },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                                    )
                                 )
                             }
-                        )
+                        }
                     }
                 }
             }
