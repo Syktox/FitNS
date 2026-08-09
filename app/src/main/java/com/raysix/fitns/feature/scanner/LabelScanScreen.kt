@@ -6,9 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -23,6 +21,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.raysix.fitns.core.design.AdaptiveColumn
+import com.raysix.fitns.core.design.AdaptiveGutterLayout
 import com.raysix.fitns.core.design.ErrorBanner
 import com.raysix.fitns.core.design.ModernCard
 import com.raysix.fitns.core.design.ScreenHeader
@@ -60,36 +60,33 @@ private fun CaptureStep(
     onImageCaptured: (ByteArray) -> Unit,
     onCancel: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        ScreenHeader(
-            title = "Scan Nutrition Label",
-            subtitle = "Photograph the nutrition table and ingredient section. OCR results are only a draft and must be confirmed."
-        )
-        if (loading) {
-            ModernCard {
-                Text(
-                    "Recognizing text...",
-                    modifier = Modifier.padding(14.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+    AdaptiveColumn(
+        modifier = Modifier.fillMaxSize(),
+        content = {
+            ScreenHeader(
+                title = "Scan Nutrition Label",
+                subtitle = "Photograph the nutrition table and ingredient section. OCR results are only a draft and must be confirmed."
+            )
+            if (loading) {
+                ModernCard {
+                    Text(
+                        "Recognizing text...",
+                        modifier = Modifier.padding(14.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                CameraCaptureView(
+                    onImageBytes = onImageCaptured,
+                    captureButtonLabel = "Capture label"
                 )
             }
-        } else {
-            CameraCaptureView(
-                onImageBytes = onImageCaptured,
-                captureButtonLabel = "Capture label"
-            )
+            errorMessage?.let { ErrorBanner(message = it) }
+            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                Text("Cancel")
+            }
         }
-        errorMessage?.let { ErrorBanner(message = it) }
-        OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-            Text("Cancel")
-        }
-    }
+    )
 }
 
 @Composable
@@ -98,120 +95,118 @@ private fun ReviewStep(
     viewModel: LabelScanViewModel,
     onApply: (ManualFoodInput) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        ScreenHeader(
-            title = "Review Label",
-            subtitle = "Correct the recognized values before applying them to your food entry."
-        )
+    AdaptiveGutterLayout(
+        header = {
+            ScreenHeader(
+                title = "Review Label",
+                subtitle = "Correct the recognized values before applying them to your food entry."
+            )
+        },
+        gutter = {
+            state.warnings.forEach { warning ->
+                ErrorBanner(message = warning)
+            }
 
-        state.warnings.forEach { warning ->
-            ErrorBanner(message = warning)
-        }
-
-        state.previewBitmap?.let { bitmap ->
-            ModernCard {
-                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SectionTitle("Recognized photo")
-                    androidx.compose.foundation.Image(
-                        bitmap = bitmap,
-                        contentDescription = "Captured nutrition label",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp)
-                    )
-                    OutlinedButton(onClick = viewModel::retake) {
-                        Text("Retake photo")
+            state.previewBitmap?.let { bitmap ->
+                ModernCard {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SectionTitle("Recognized photo")
+                        androidx.compose.foundation.Image(
+                            bitmap = bitmap,
+                            contentDescription = "Captured nutrition label",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp)
+                        )
+                        OutlinedButton(onClick = viewModel::retake) {
+                            Text("Retake photo")
+                        }
                     }
                 }
             }
-        }
-
-        ModernCard {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionTitle("Product")
-                OutlinedTextField(
-                    value = state.name,
-                    onValueChange = viewModel::onNameChange,
-                    label = { Text("Name") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = state.basisGrams,
-                    onValueChange = viewModel::onBasisGramsChange,
-                    label = { Text("Values refer to (g)") },
-                    supportingText = {
-                        Text(
-                            if (state.perPortion) {
-                                "The table is per portion. Enter the portion weight the listed values refer to."
-                            } else {
-                                "The table is per 100 g. Enter the amount the listed values refer to."
-                            }
-                        )
-                    },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        ModernCard {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionTitle("Detected nutrition values")
-                LabelNumericField(state.calories, viewModel::onCaloriesChange, "Calories")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LabelNumericField(state.protein, viewModel::onProteinChange, "Protein g", Modifier.weight(1f))
-                    LabelNumericField(state.carbs, viewModel::onCarbsChange, "Carbs g", Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LabelNumericField(state.fat, viewModel::onFatChange, "Fat g", Modifier.weight(1f))
-                    LabelNumericField(state.sugar, viewModel::onSugarChange, "Sugar g", Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LabelNumericField(state.saturatedFat, viewModel::onSaturatedFatChange, "Sat. fat g", Modifier.weight(1f))
-                    LabelNumericField(state.fiber, viewModel::onFiberChange, "Fiber g", Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LabelNumericField(state.salt, viewModel::onSaltChange, "Salt g", Modifier.weight(1f))
-                    LabelNumericField(state.sodium, viewModel::onSodiumChange, "Sodium mg", Modifier.weight(1f))
-                }
-            }
-        }
-
-        if (state.micronutrients.values.isNotEmpty()) {
+        },
+        main = {
             ModernCard {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SectionTitle("Recognized micronutrients")
-                    state.micronutrients.values.entries
-                        .sortedBy { it.key.name }
-                        .forEach { (key, value) ->
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SectionTitle("Product")
+                    OutlinedTextField(
+                        value = state.name,
+                        onValueChange = viewModel::onNameChange,
+                        label = { Text("Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = state.basisGrams,
+                        onValueChange = viewModel::onBasisGramsChange,
+                        label = { Text("Values refer to (g)") },
+                        supportingText = {
                             Text(
-                                text = "${key.label}: ${value.amount.formatPlain()} ${key.unit} (estimated)",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                if (state.perPortion) {
+                                    "The table is per portion. Enter the portion weight the listed values refer to."
+                                } else {
+                                    "The table is per 100 g. Enter the amount the listed values refer to."
+                                }
                             )
-                        }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            ModernCard {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SectionTitle("Detected nutrition values")
+                    LabelNumericField(state.calories, viewModel::onCaloriesChange, "Calories")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LabelNumericField(state.protein, viewModel::onProteinChange, "Protein g", Modifier.weight(1f))
+                        LabelNumericField(state.carbs, viewModel::onCarbsChange, "Carbs g", Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LabelNumericField(state.fat, viewModel::onFatChange, "Fat g", Modifier.weight(1f))
+                        LabelNumericField(state.sugar, viewModel::onSugarChange, "Sugar g", Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LabelNumericField(state.saturatedFat, viewModel::onSaturatedFatChange, "Sat. fat g", Modifier.weight(1f))
+                        LabelNumericField(state.fiber, viewModel::onFiberChange, "Fiber g", Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LabelNumericField(state.salt, viewModel::onSaltChange, "Salt g", Modifier.weight(1f))
+                        LabelNumericField(state.sodium, viewModel::onSodiumChange, "Sodium mg", Modifier.weight(1f))
+                    }
+                }
+            }
+
+            if (state.micronutrients.values.isNotEmpty()) {
+                ModernCard {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SectionTitle("Recognized micronutrients")
+                        state.micronutrients.values.entries
+                            .sortedBy { it.key.name }
+                            .forEach { (key, value) ->
+                                Text(
+                                    text = "${key.label}: ${value.amount.formatPlain()} ${key.unit} (estimated)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                    }
+                }
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { viewModel.apply(onApply) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Apply to food entry")
+                }
+                OutlinedButton(onClick = viewModel::retake) {
+                    Text("Retake")
                 }
             }
         }
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { viewModel.apply(onApply) },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Apply to food entry")
-            }
-            OutlinedButton(onClick = viewModel::retake) {
-                Text("Retake")
-            }
-        }
-    }
+    )
 }
 
 @Composable

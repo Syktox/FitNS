@@ -7,14 +7,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -40,8 +37,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.raysix.fitns.core.design.AdaptiveTwoColumn
 import com.raysix.fitns.core.design.ErrorBanner
-import com.raysix.fitns.core.design.FitNsDimens
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.domain.model.NutritionGoal
@@ -107,18 +104,15 @@ fun OnboardingScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(FitNsDimens.ScreenPadding),
-        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
-    ) {
-        ScreenHeader(
-            title = "Welcome to FitNS",
-            subtitle = "Set up your profile so nutrition and workout targets match your goal."
-        )
-        SectionCard(title = "Sign in with Google", subtitle = "Optional: connect your Google account to personalize the app.") {
+    AdaptiveTwoColumn(
+        header = {
+            ScreenHeader(
+                title = "Welcome to FitNS",
+                subtitle = "Set up your profile so nutrition and workout targets match your goal."
+            )
+        },
+        main = {
+            SectionCard(title = "Sign in with Google", subtitle = "Optional: connect your Google account to personalize the app.") {
             val googleAccount = uiState.googleAccount
             if (googleAccount == null) {
                 Surface(
@@ -231,8 +225,10 @@ fun OnboardingScreen(
                 )
             }
         }
-        SectionCard(
-            title = "Nutrition Goals",
+        },
+        side = {
+            SectionCard(
+                title = "Nutrition Goals",
             subtitle = "Estimates use body weight, activity, and goal. Adjust them after observing progress.",
             trailing = {
                 Surface(
@@ -315,7 +311,8 @@ fun OnboardingScreen(
                 modifier = Modifier.padding(vertical = 14.dp)
             )
         }
-    }
+        }
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)

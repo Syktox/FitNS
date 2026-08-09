@@ -5,13 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -23,8 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.raysix.fitns.core.design.AdaptiveTwoColumn
 import com.raysix.fitns.core.design.EmptyStateCard
-import com.raysix.fitns.core.design.FitNsDimens
 import com.raysix.fitns.core.design.ModernCard
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
@@ -33,30 +30,26 @@ import com.raysix.fitns.domain.model.RecommendationSeverity
 
 @Composable
 fun RecommendationsScreen(uiState: RecommendationsUiState) {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(FitNsDimens.ScreenPadding),
-        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
-    ) {
-        item {
+    AdaptiveTwoColumn(
+        header = {
             ScreenHeader(
                 title = "Recommendations",
                 subtitle = "Cautious guidance from your local data."
             )
-        }
-        if (uiState.recommendations.isEmpty()) {
-            item {
+        },
+        main = {
+            if (uiState.recommendations.isEmpty()) {
                 EmptyStateCard(
                     title = "No recommendations yet.",
                     message = "Log nutrition, workouts, and body weight to unlock local guidance."
                 )
+            } else {
+                uiState.recommendations.forEach { recommendation ->
+                    RecommendationCard(recommendation)
+                }
             }
-        }
-        items(uiState.recommendations) { recommendation ->
-            RecommendationCard(recommendation)
-        }
-        item {
+        },
+        side = {
             SectionCard(title = "Note") {
                 Text(
                     "This app does not provide diagnoses or recommend medication. Unusual or potentially risky health data should be reviewed with a medical professional.",
@@ -64,7 +57,7 @@ fun RecommendationsScreen(uiState: RecommendationsUiState) {
                 )
             }
         }
-    }
+    )
 }
 
 @Composable

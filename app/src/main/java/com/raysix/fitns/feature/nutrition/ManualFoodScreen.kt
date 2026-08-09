@@ -5,15 +5,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -23,14 +23,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.raysix.fitns.core.design.FitNsDimens
+import com.raysix.fitns.core.design.AdaptiveGutterLayout
+import com.raysix.fitns.core.design.ModernCard
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.domain.model.DataQuality
@@ -65,23 +66,25 @@ fun ManualFoodScreen(
     onPrefillConsumed: () -> Unit,
     onScanLabel: () -> Unit,
     onScanBarcode: () -> Unit,
+    onScanMeal: () -> Unit,
     onSave: (ManualFoodInput) -> Unit,
     onCancel: () -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var brand by remember { mutableStateOf("") }
-    var grams by remember { mutableStateOf("100") }
-    var calories by remember { mutableStateOf("") }
-    var protein by remember { mutableStateOf("") }
-    var carbs by remember { mutableStateOf("") }
-    var sugar by remember { mutableStateOf("") }
-    var fat by remember { mutableStateOf("") }
-    var saturatedFat by remember { mutableStateOf("") }
-    var fiber by remember { mutableStateOf("") }
-    var salt by remember { mutableStateOf("") }
-    var sodium by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
-    var mealType by remember { mutableStateOf(MealType.Snack) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var brand by rememberSaveable { mutableStateOf("") }
+    var grams by rememberSaveable { mutableStateOf("100") }
+    var calories by rememberSaveable { mutableStateOf("") }
+    var protein by rememberSaveable { mutableStateOf("") }
+    var carbs by rememberSaveable { mutableStateOf("") }
+    var sugar by rememberSaveable { mutableStateOf("") }
+    var fat by rememberSaveable { mutableStateOf("") }
+    var saturatedFat by rememberSaveable { mutableStateOf("") }
+    var fiber by rememberSaveable { mutableStateOf("") }
+    var salt by rememberSaveable { mutableStateOf("") }
+    var sodium by rememberSaveable { mutableStateOf("") }
+    var notes by rememberSaveable { mutableStateOf("") }
+    var mealTypeName by rememberSaveable { mutableStateOf(MealType.Snack.name) }
+    val mealType = MealType.entries.firstOrNull { it.name == mealTypeName } ?: MealType.Snack
 
     LaunchedEffect(barcodeLookup.prefillInput) {
         barcodeLookup.prefillInput?.let { input ->
@@ -98,123 +101,168 @@ fun ManualFoodScreen(
             salt = input.salt.formatPlain()
             sodium = input.sodiumMilligrams?.formatPlain().orEmpty()
             notes = input.notes
-            mealType = input.mealType
+            mealTypeName = input.mealType.name
             onPrefillConsumed()
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(FitNsDimens.ScreenPadding),
-        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
-    ) {
-        ScreenHeader(
-            title = "Add Food",
-            subtitle = "Review every detail before saving it to your log."
-        )
-        BarcodeLookupCard(
-            state = barcodeLookup,
-            onBarcodeChange = onBarcodeChange,
-            onLookup = onLookupBarcode,
-            onScanBarcode = onScanBarcode
-        )
-        SectionCard(title = "Nutrition label", subtitle = "Photograph the nutrition table to fill in the values. OCR results are a draft and must be reviewed.") {
-            OutlinedButton(
-                onClick = onScanLabel,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(999.dp)
-            ) {
-                Text("Scan nutrition label")
-            }
-        }
-        SectionCard(title = "Product") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = brand, onValueChange = { brand = it }, label = { Text("Brand") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
-                NumericField(value = grams, onValueChange = { grams = it }, label = "Amount in grams")
-                PortionPresetChips(
-                    currentGrams = grams,
-                    onSelectGrams = { grams = it }
+    AdaptiveGutterLayout(
+        header = {
+            ScreenHeader(
+                title = "Add Food",
+                subtitle = "Scan, photograph, or enter details for a food. Review every detail before saving."
+            )
+        },
+        gutterWidthFraction = 0.4f,
+        gutter = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                ScanMealCard(onScanMeal = onScanMeal)
+                BarcodeLookupCard(
+                    state = barcodeLookup,
+                    onBarcodeChange = onBarcodeChange,
+                    onLookup = onLookupBarcode,
+                    onScanBarcode = onScanBarcode
                 )
-            }
-        }
-        SectionCard(title = "Nutrition per serving") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                NumericField(value = calories, onValueChange = { calories = it }, label = "Calories")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(value = protein, onValueChange = { protein = it }, label = "Protein g", modifier = Modifier.weight(1f))
-                    NumericField(value = carbs, onValueChange = { carbs = it }, label = "Carbs g", modifier = Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(value = fat, onValueChange = { fat = it }, label = "Fat g", modifier = Modifier.weight(1f))
-                    NumericField(value = sugar, onValueChange = { sugar = it }, label = "Sugar g", modifier = Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(value = saturatedFat, onValueChange = { saturatedFat = it }, label = "Saturated fat g", modifier = Modifier.weight(1f))
-                    NumericField(value = fiber, onValueChange = { fiber = it }, label = "Fiber g", modifier = Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(value = salt, onValueChange = { salt = it }, label = "Salt g", modifier = Modifier.weight(1f))
-                    NumericField(value = sodium, onValueChange = { sodium = it }, label = "Sodium mg", modifier = Modifier.weight(1f))
-                }
-            }
-        }
-        SectionCard(title = "Meal") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf(MealType.Breakfast, MealType.Lunch, MealType.Dinner, MealType.Snack).forEach { type ->
-                        FilterChip(
-                            selected = mealType == type,
-                            onClick = { mealType = type },
-                            label = { Text(type.name) }
-                        )
+                SectionCard(title = "Nutrition label", subtitle = "Photograph the nutrition table to fill in the values. OCR results are a draft and must be reviewed.") {
+                    OutlinedButton(
+                        onClick = onScanLabel,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(999.dp)
+                    ) {
+                        Text("Scan nutrition label")
                     }
                 }
-                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
+            }
+        },
+        main = {
+            SectionCard(title = "Product") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = brand, onValueChange = { brand = it }, label = { Text("Brand") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
+                    NumericField(value = grams, onValueChange = { grams = it }, label = "Amount in grams")
+                    PortionPresetChips(
+                        currentGrams = grams,
+                        onSelectGrams = { grams = it }
+                    )
+                }
+            }
+            SectionCard(title = "Nutrition per serving") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    NumericField(value = calories, onValueChange = { calories = it }, label = "Calories")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NumericField(value = protein, onValueChange = { protein = it }, label = "Protein g", modifier = Modifier.weight(1f))
+                        NumericField(value = carbs, onValueChange = { carbs = it }, label = "Carbs g", modifier = Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NumericField(value = fat, onValueChange = { fat = it }, label = "Fat g", modifier = Modifier.weight(1f))
+                        NumericField(value = sugar, onValueChange = { sugar = it }, label = "Sugar g", modifier = Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NumericField(value = saturatedFat, onValueChange = { saturatedFat = it }, label = "Saturated fat g", modifier = Modifier.weight(1f))
+                        NumericField(value = fiber, onValueChange = { fiber = it }, label = "Fiber g", modifier = Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NumericField(value = salt, onValueChange = { salt = it }, label = "Salt g", modifier = Modifier.weight(1f))
+                        NumericField(value = sodium, onValueChange = { sodium = it }, label = "Sodium mg", modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+            SectionCard(title = "Meal") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(MealType.Breakfast, MealType.Lunch, MealType.Dinner, MealType.Snack).forEach { type ->
+                            FilterChip(
+                                selected = mealType == type,
+                                onClick = { mealTypeName = type.name },
+                                label = { Text(type.name) }
+                            )
+                        }
+                    }
+                    OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    onClick = {
+                        onSave(
+                            ManualFoodInput(
+                                name = name,
+                                brand = brand.ifBlank { null },
+                                grams = grams.toDoubleOrNull() ?: 0.0,
+                                calories = calories.toDoubleOrNull() ?: 0.0,
+                                protein = protein.toDoubleOrNull() ?: 0.0,
+                                carbohydrates = carbs.toDoubleOrNull() ?: 0.0,
+                                sugar = sugar.toDoubleOrNull() ?: 0.0,
+                                fat = fat.toDoubleOrNull() ?: 0.0,
+                                saturatedFat = saturatedFat.toDoubleOrNull() ?: 0.0,
+                                fiber = fiber.toDoubleOrNull() ?: 0.0,
+                                salt = salt.toDoubleOrNull() ?: 0.0,
+                                sodiumMilligrams = sodium.toDoubleOrNull(),
+                                mealType = mealType,
+                                notes = notes
+                            )
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Text(
+                        "Save",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 13.dp)
+                    )
+                }
+                OutlinedButton(
+                    onClick = onCancel,
+                    shape = RoundedCornerShape(999.dp)
+                ) {
+                    Text("Cancel")
+                }
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    )
+}
+
+@Composable
+private fun ScanMealCard(onScanMeal: () -> Unit) {
+    ModernCard {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CameraAlt,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Scan a meal",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "Photograph your plate and get estimated macros for each item, powered by your n8n instance.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Surface(
-                onClick = {
-                    onSave(
-                        ManualFoodInput(
-                            name = name,
-                            brand = brand.ifBlank { null },
-                            grams = grams.toDoubleOrNull() ?: 0.0,
-                            calories = calories.toDoubleOrNull() ?: 0.0,
-                            protein = protein.toDoubleOrNull() ?: 0.0,
-                            carbohydrates = carbs.toDoubleOrNull() ?: 0.0,
-                            sugar = sugar.toDoubleOrNull() ?: 0.0,
-                            fat = fat.toDoubleOrNull() ?: 0.0,
-                            saturatedFat = saturatedFat.toDoubleOrNull() ?: 0.0,
-                            fiber = fiber.toDoubleOrNull() ?: 0.0,
-                            salt = salt.toDoubleOrNull() ?: 0.0,
-                            sodiumMilligrams = sodium.toDoubleOrNull(),
-                            mealType = mealType,
-                            notes = notes
-                        )
-                    )
-                },
-                modifier = Modifier.weight(1f),
+                onClick = onScanMeal,
                 shape = RoundedCornerShape(999.dp),
                 color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    "Save",
+                    text = "Take photo & analyze",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 13.dp)
+                    modifier = Modifier.padding(vertical = 12.dp)
                 )
-            }
-            OutlinedButton(
-                onClick = onCancel,
-                shape = RoundedCornerShape(999.dp)
-            ) {
-                Text("Cancel")
             }
         }
     }

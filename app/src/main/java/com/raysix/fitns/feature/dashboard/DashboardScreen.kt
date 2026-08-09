@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +19,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.raysix.fitns.core.design.AdaptiveTwoColumn
 import com.raysix.fitns.core.design.BrandGradient
 import com.raysix.fitns.core.design.EmptyStateCard
 import com.raysix.fitns.core.design.FitNsDimens
@@ -53,63 +52,42 @@ fun DashboardScreen(
     onStartWorkout: () -> Unit,
     onAddWater: (Double) -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(FitNsDimens.ScreenPadding),
-        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
-    ) {
-        item {
+    AdaptiveTwoColumn(
+        header = {
             ScreenHeader(
                 title = "FitNS",
                 subtitle = "Daily nutrition and strength workout status"
             )
-        }
-        item {
+        },
+        main = {
             CalorieHeroCard(
                 dashboard = dashboard,
                 onAddFood = onAddFood,
                 onStartWorkout = onStartWorkout
             )
-        }
-        item {
-            DailyCoachCard(coach = coach)
-        }
-        item {
             MacroRingsCard(dashboard = dashboard)
-        }
-        item {
             WaterCard(dashboard = dashboard, message = message, onAddWater = onAddWater)
-        }
-        item {
-            ReadinessCard(readiness = readiness, onStartWorkout = onStartWorkout)
-        }
-        item {
             WorkoutSummaryCard(workoutSummary = workoutSummary, onStartWorkout = onStartWorkout)
-        }
-        item {
-            MicronutrientCard(micronutrients = micronutrients)
-        }
-        if (mealBreakdown.isNotEmpty()) {
-            item {
+            if (mealBreakdown.isNotEmpty()) {
                 MealBreakdownCard(meals = mealBreakdown)
             }
-        }
-        item {
             SectionTitle("Today's Entries")
-        }
-        if (dashboard.entries.isEmpty()) {
-            item {
+            if (dashboard.entries.isEmpty()) {
                 EmptyStateCard(
                     title = "No foods logged yet.",
                     message = "Add a meal to start seeing calories, macros, and micronutrient coverage."
                 )
             }
+            dashboard.entries.forEach { entry ->
+                FoodEntryCard(entry)
+            }
+        },
+        side = {
+            DailyCoachCard(coach = coach)
+            ReadinessCard(readiness = readiness, onStartWorkout = onStartWorkout)
+            MicronutrientCard(micronutrients = micronutrients)
         }
-        items(dashboard.entries) { entry ->
-            FoodEntryCard(entry)
-        }
-    }
+    )
 }
 
 @Composable

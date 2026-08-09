@@ -5,13 +5,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.raysix.fitns.core.design.FitNsDimens
+import com.raysix.fitns.core.design.AdaptiveTwoColumn
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.domain.model.NutritionGoal
@@ -78,152 +75,152 @@ fun ProfileScreen(
         water = uiState.nutritionGoal.waterMilliliters.formatPlain()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(FitNsDimens.ScreenPadding),
-        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
-    ) {
-        ScreenHeader(
-            title = "Profile",
-            subtitle = "Set goals that drive nutrition targets and progress tracking."
-        )
-        SectionCard(title = "Profile") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(age, { age = it }, "Age", Modifier.weight(1f))
-                    NumericField(trainingDays, { trainingDays = it }, "Training days", Modifier.weight(1f))
-                }
-                OutlinedTextField(
-                    physiology, { physiology = it },
-                    label = { Text("Physiology") },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(height, { height = it }, "Height cm", Modifier.weight(1f))
-                    NumericField(weight, { weight = it }, "Weight kg", Modifier.weight(1f))
-                }
-                NumericField(targetWeight, { targetWeight = it }, "Target weight kg")
-                OutlinedTextField(
-                    activity, { activity = it },
-                    label = { Text("Activity level") },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                ChoiceChips(
-                    options = listOf("Low", "Moderate", "High"),
-                    selected = activity,
-                    onSelected = { activity = it }
-                )
-                OutlinedTextField(
-                    goalName, { goalName = it },
-                    label = { Text("Goal") },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                ChoiceChips(
-                    options = listOf("Maintain", "Lose Fat", "Build Muscle"),
-                    selected = goalName,
-                    onSelected = { goalName = it }
-                )
-            }
-        }
-        SectionCard(
-            title = "Nutrition Goals",
-            subtitle = "Estimates use body weight, activity, and goal. Adjust them after observing progress.",
-            trailing = {
-                Surface(
-                    onClick = {
-                        val estimate = NutritionGoalEstimator.estimate(
-                            weightKg = weight.toDoubleOrNull(),
-                            goal = goalName.ifBlank { "Maintain" },
-                            activityLevel = activity.ifBlank { "Moderate" }
-                        )
-                        calories = estimate.caloriesKcal.formatPlain()
-                        protein = estimate.proteinGrams.formatPlain()
-                        carbs = estimate.carbohydrateGrams.formatPlain()
-                        fat = estimate.fatGrams.formatPlain()
-                        fiber = estimate.fiberGrams.formatPlain()
-                        water = estimate.waterMilliliters.formatPlain()
-                    },
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ) {
-                    Text(
-                        "Estimate",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
-                    )
-                }
-            }
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                NumericField(calories, { calories = it }, "Calories kcal")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(protein, { protein = it }, "Protein g", Modifier.weight(1f))
-                    NumericField(carbs, { carbs = it }, "Carbs g", Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(fat, { fat = it }, "Fat g", Modifier.weight(1f))
-                    NumericField(fiber, { fiber = it }, "Fiber g", Modifier.weight(1f))
-                }
-                NumericField(water, { water = it }, "Water ml")
-            }
-        }
-        uiState.statusMessage?.let {
-            Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
-        }
-        uiState.errorMessage?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
-        }
-        Surface(
-            onClick = {
-                onSave(
-                    UserProfile(
-                        age = age.toIntOrNull(),
-                        sexOrPhysiology = physiology.ifBlank { null },
-                        heightCm = height.toDoubleOrNull(),
-                        weightKg = weight.toDoubleOrNull(),
-                        targetWeightKg = targetWeight.toDoubleOrNull(),
-                        activityLevel = activity.ifBlank { "Moderate" },
-                        trainingDaysPerWeek = trainingDays.toIntOrNull() ?: 0,
-                        goal = goalName.ifBlank { "Maintain" }
-                    ),
-                    NutritionGoal(
-                        caloriesKcal = calories.toDoubleOrNull() ?: 0.0,
-                        proteinGrams = protein.toDoubleOrNull() ?: 0.0,
-                        carbohydrateGrams = carbs.toDoubleOrNull() ?: 0.0,
-                        fatGrams = fat.toDoubleOrNull() ?: 0.0,
-                        fiberGrams = fiber.toDoubleOrNull() ?: 0.0,
-                        waterMilliliters = water.toDoubleOrNull() ?: 0.0
-                    )
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(999.dp),
-            color = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary
-        ) {
-            Text(
-                "Save Profile",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(vertical = 14.dp)
+    AdaptiveTwoColumn(
+        header = {
+            ScreenHeader(
+                title = "Profile",
+                subtitle = "Set goals that drive nutrition targets and progress tracking."
             )
-        }
-        SectionCard(title = "Quick Access") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                QuickLink(text = "Weight Tracking", onClick = onOpenWeight)
-                QuickLink(text = "Coaching Tips", onClick = onOpenTips)
-                QuickLink(text = "Settings", onClick = onOpenSettings)
+        },
+        main = {
+            SectionCard(title = "Profile") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NumericField(age, { age = it }, "Age", Modifier.weight(1f))
+                        NumericField(trainingDays, { trainingDays = it }, "Training days", Modifier.weight(1f))
+                    }
+                    OutlinedTextField(
+                        physiology, { physiology = it },
+                        label = { Text("Physiology") },
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NumericField(height, { height = it }, "Height cm", Modifier.weight(1f))
+                        NumericField(weight, { weight = it }, "Weight kg", Modifier.weight(1f))
+                    }
+                    NumericField(targetWeight, { targetWeight = it }, "Target weight kg")
+                    OutlinedTextField(
+                        activity, { activity = it },
+                        label = { Text("Activity level") },
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    ChoiceChips(
+                        options = listOf("Low", "Moderate", "High"),
+                        selected = activity,
+                        onSelected = { activity = it }
+                    )
+                    OutlinedTextField(
+                        goalName, { goalName = it },
+                        label = { Text("Goal") },
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    ChoiceChips(
+                        options = listOf("Maintain", "Lose Fat", "Build Muscle"),
+                        selected = goalName,
+                        onSelected = { goalName = it }
+                    )
+                }
+            }
+            SectionCard(
+                title = "Nutrition Goals",
+                subtitle = "Estimates use body weight, activity, and goal. Adjust them after observing progress.",
+                trailing = {
+                    Surface(
+                        onClick = {
+                            val estimate = NutritionGoalEstimator.estimate(
+                                weightKg = weight.toDoubleOrNull(),
+                                goal = goalName.ifBlank { "Maintain" },
+                                activityLevel = activity.ifBlank { "Moderate" }
+                            )
+                            calories = estimate.caloriesKcal.formatPlain()
+                            protein = estimate.proteinGrams.formatPlain()
+                            carbs = estimate.carbohydrateGrams.formatPlain()
+                            fat = estimate.fatGrams.formatPlain()
+                            fiber = estimate.fiberGrams.formatPlain()
+                            water = estimate.waterMilliliters.formatPlain()
+                        },
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ) {
+                        Text(
+                            "Estimate",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    NumericField(calories, { calories = it }, "Calories kcal")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NumericField(protein, { protein = it }, "Protein g", Modifier.weight(1f))
+                        NumericField(carbs, { carbs = it }, "Carbs g", Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NumericField(fat, { fat = it }, "Fat g", Modifier.weight(1f))
+                        NumericField(fiber, { fiber = it }, "Fiber g", Modifier.weight(1f))
+                    }
+                    NumericField(water, { water = it }, "Water ml")
+                }
+            }
+            uiState.statusMessage?.let {
+                Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+            }
+            uiState.errorMessage?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
+            }
+            Surface(
+                onClick = {
+                    onSave(
+                        UserProfile(
+                            age = age.toIntOrNull(),
+                            sexOrPhysiology = physiology.ifBlank { null },
+                            heightCm = height.toDoubleOrNull(),
+                            weightKg = weight.toDoubleOrNull(),
+                            targetWeightKg = targetWeight.toDoubleOrNull(),
+                            activityLevel = activity.ifBlank { "Moderate" },
+                            trainingDaysPerWeek = trainingDays.toIntOrNull() ?: 0,
+                            goal = goalName.ifBlank { "Maintain" }
+                        ),
+                        NutritionGoal(
+                            caloriesKcal = calories.toDoubleOrNull() ?: 0.0,
+                            proteinGrams = protein.toDoubleOrNull() ?: 0.0,
+                            carbohydrateGrams = carbs.toDoubleOrNull() ?: 0.0,
+                            fatGrams = fat.toDoubleOrNull() ?: 0.0,
+                            fiberGrams = fiber.toDoubleOrNull() ?: 0.0,
+                            waterMilliliters = water.toDoubleOrNull() ?: 0.0
+                        )
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                Text(
+                    "Save Profile",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 14.dp)
+                )
+            }
+        },
+        side = {
+            SectionCard(title = "Quick Access") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    QuickLink(text = "Weight Tracking", onClick = onOpenWeight)
+                    QuickLink(text = "Coaching Tips", onClick = onOpenTips)
+                    QuickLink(text = "Settings", onClick = onOpenSettings)
+                }
             }
         }
-    }
+    )
 }
 
 @Composable

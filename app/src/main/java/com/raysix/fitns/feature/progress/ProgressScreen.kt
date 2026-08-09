@@ -4,12 +4,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,9 +20,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.raysix.fitns.core.design.AdaptiveTwoColumn
 import com.raysix.fitns.core.design.BrandGradient
 import com.raysix.fitns.core.design.EmptyStateCard
-import com.raysix.fitns.core.design.FitNsDimens
 import com.raysix.fitns.core.design.GradientHeroCard
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
@@ -33,30 +31,29 @@ import kotlin.math.roundToInt
 
 @Composable
 fun ProgressScreen(uiState: ProgressUiState) {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(FitNsDimens.ScreenPadding),
-        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
-    ) {
-        item {
+    AdaptiveTwoColumn(
+        header = {
             ScreenHeader(
                 title = "Progress",
                 subtitle = "Trends across nutrition, weight, and workouts."
             )
-        }
-        item {
+        },
+        main = {
             ProgressSummaryCard(uiState.summary)
-        }
-        item {
             TrendCard(
                 title = "Calories",
                 valueLabel = "kcal",
                 points = uiState.calories,
                 emptyMessage = "Log meals for several days to see calorie trends."
             )
-        }
-        item {
+            TrendCard(
+                title = "Workout Volume",
+                valueLabel = "kg",
+                points = uiState.workoutVolume,
+                emptyMessage = "Log workouts to see weekly volume patterns."
+            )
+        },
+        side = {
             TrendCard(
                 title = "Body Weight",
                 valueLabel = "kg",
@@ -64,15 +61,7 @@ fun ProgressScreen(uiState: ProgressUiState) {
                 emptyMessage = "Log body weight entries to see your trend."
             )
         }
-        item {
-            TrendCard(
-                title = "Workout Volume",
-                valueLabel = "kg",
-                points = uiState.workoutVolume,
-                emptyMessage = "Log workouts to see weekly volume patterns."
-            )
-        }
-    }
+    )
 }
 
 @Composable

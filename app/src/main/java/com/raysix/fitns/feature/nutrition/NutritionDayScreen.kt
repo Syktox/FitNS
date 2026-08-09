@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -30,12 +28,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.raysix.fitns.core.design.AdaptiveTwoColumn
 import com.raysix.fitns.core.design.EmptyStateCard
 import com.raysix.fitns.core.design.ErrorBanner
-import com.raysix.fitns.core.design.FitNsDimens
 import com.raysix.fitns.core.design.LabeledProgress
 import com.raysix.fitns.core.design.MetricProgressBar
-import com.raysix.fitns.core.design.MetricRing
 import com.raysix.fitns.core.design.ModernCard
 import com.raysix.fitns.core.design.ProgressRing
 import com.raysix.fitns.core.design.ScreenHeader
@@ -120,13 +117,8 @@ fun NutritionDayScreen(
         )
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(FitNsDimens.ScreenPadding),
-        verticalArrangement = Arrangement.spacedBy(FitNsDimens.ContentSpacing)
-    ) {
-        item {
+    AdaptiveTwoColumn(
+        header = {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column(Modifier.weight(1f)) {
                     ScreenHeader(
@@ -149,46 +141,51 @@ fun NutritionDayScreen(
                     )
                 }
             }
-        }
-        item {
+        },
+        main = {
             NutritionTargetsCard(dashboard = dashboard)
-        }
-        item {
-            MicronutrientsCard(micronutrients = micronutrients)
-        }
-        if (dashboard.entries.isNotEmpty()) {
-            item {
+            if (dashboard.entries.isNotEmpty()) {
                 MealSummaryCard(entries = dashboard.entries)
-            }
-            item {
                 MealFilterChips(
                     selectedMeal = selectedMeal,
                     onSelectedMealChange = { selectedMeal = it }
                 )
             }
-        }
-        if (errorMessage != null) {
-            item {
+            if (errorMessage != null) {
                 ErrorBanner(message = errorMessage)
             }
-        }
-        if (foodFavorites.isNotEmpty()) {
-            item {
+            SectionTitle("Today")
+            if (dashboard.entries.isEmpty()) {
+                EmptyStateCard(
+                    title = "No foods logged yet.",
+                    message = "Add your first meal or reuse a recent food to start tracking today."
+                )
+            }
+            visibleEntries.forEach { entry ->
+                FoodEntryCard(
+                    entry = entry,
+                    onDuplicate = { onDuplicateFood(entry) },
+                    onSaveFavorite = { onSaveFavorite(entry) },
+                    onDelete = { pendingDelete = entry }
+                )
+            }
+        },
+        side = {
+            MicronutrientsCard(micronutrients = micronutrients)
+            if (foodFavorites.isNotEmpty()) {
                 SectionTitle("Favorites")
             }
-            items(foodFavorites) { favorite ->
+            foodFavorites.forEach { favorite ->
                 FavoriteCard(
                     favorite = favorite,
                     onUse = { onUseFavorite(favorite) },
                     onDelete = { pendingFavoriteDelete = favorite }
                 )
             }
-        }
-        if (foodHistory.isNotEmpty()) {
-            item {
+            if (foodHistory.isNotEmpty()) {
                 SectionTitle("Quick Reuse")
             }
-            items(foodHistory.take(5)) { entry ->
+            foodHistory.take(5).forEach { entry ->
                 QuickReuseCard(
                     entry = entry,
                     onUse = { onDuplicateFood(entry) },
@@ -196,26 +193,7 @@ fun NutritionDayScreen(
                 )
             }
         }
-        item {
-            SectionTitle("Today")
-        }
-        if (dashboard.entries.isEmpty()) {
-            item {
-                EmptyStateCard(
-                    title = "No foods logged yet.",
-                    message = "Add your first meal or reuse a recent food to start tracking today."
-                )
-            }
-        }
-        items(visibleEntries) { entry ->
-            FoodEntryCard(
-                entry = entry,
-                onDuplicate = { onDuplicateFood(entry) },
-                onSaveFavorite = { onSaveFavorite(entry) },
-                onDelete = { pendingDelete = entry }
-            )
-        }
-    }
+    )
 }
 
 @Composable

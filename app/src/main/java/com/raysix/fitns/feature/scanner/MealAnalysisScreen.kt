@@ -5,11 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
@@ -24,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.raysix.fitns.core.design.AdaptiveGutterLayout
 import com.raysix.fitns.core.design.ErrorBanner
 import com.raysix.fitns.core.design.ModernCard
 import com.raysix.fitns.core.design.ScreenHeader
@@ -39,30 +37,22 @@ fun MealAnalysisScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
+    AdaptiveGutterLayout(
+        header = {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 ScreenHeader(
                     title = "Meal Analysis",
                     subtitle = "Photo analysis estimates are approximations. Review everything before saving."
                 )
             }
-        }
-
-        if (state.phase == MealAnalysisPhase.Idle || state.phase == MealAnalysisPhase.Analyzing) {
-            item {
+        },
+        gutter = {
+            if (state.phase == MealAnalysisPhase.Idle || state.phase == MealAnalysisPhase.Analyzing) {
                 CameraCaptureView(
                     onImageBytes = viewModel::onImageCaptured,
                     captureButtonLabel = if (state.previewBitmap != null) "Retake photo" else "Capture photo"
                 )
-            }
-            state.previewBitmap?.let { bitmap ->
-                item {
+                state.previewBitmap?.let { bitmap ->
                     ModernCard {
                         Text(
                             "Photo captured. Confirm consent below before analysis.",
@@ -72,7 +62,9 @@ fun MealAnalysisScreen(
                     }
                 }
             }
-            item {
+        },
+        main = {
+            if (state.phase == MealAnalysisPhase.Idle || state.phase == MealAnalysisPhase.Analyzing) {
                 ModernCard {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
@@ -113,17 +105,13 @@ fun MealAnalysisScreen(
                     }
                 }
             }
-        }
 
-        state.errorMessage?.let { message ->
-            item {
+            state.errorMessage?.let { message ->
                 ErrorBanner(message = message)
             }
-        }
 
-        if (state.phase == MealAnalysisPhase.Review) {
-            state.disclaimer?.let { disclaimer ->
-                item {
+            if (state.phase == MealAnalysisPhase.Review) {
+                state.disclaimer?.let { disclaimer ->
                     ModernCard {
                         Text(
                             text = disclaimer,
@@ -133,20 +121,16 @@ fun MealAnalysisScreen(
                         )
                     }
                 }
-            }
-            item {
                 SectionTitle("Detected items")
-            }
-            items(state.items, key = { it.id }) { item ->
-                AnalysisItemCard(
-                    item = item,
-                    onUpdate = { grams, calories, protein, carbs, fat ->
-                        viewModel.updateItem(item.id, grams, calories, protein, carbs, fat)
-                    },
-                    onRemove = { viewModel.removeItem(item.id) }
-                )
-            }
-            item {
+                state.items.forEach { item ->
+                    AnalysisItemCard(
+                        item = item,
+                        onUpdate = { grams, calories, protein, carbs, fat ->
+                            viewModel.updateItem(item.id, grams, calories, protein, carbs, fat)
+                        },
+                        onRemove = { viewModel.removeItem(item.id) }
+                    )
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { viewModel.save(onClose) },
@@ -161,7 +145,7 @@ fun MealAnalysisScreen(
                 }
             }
         }
-    }
+    )
 }
 
 @Composable
