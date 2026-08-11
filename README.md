@@ -7,12 +7,12 @@ All visible app UI copy is kept in US English.
 ## App Features
 
 - Dashboard with daily nutrition progress, hydration actions, training summary, and coach guidance.
-- Nutrition logging with macro and micronutrient fields, meal filters, favorites, barcode lookup wiring, label scan, and meal photo analysis entry points.
+- Nutrition logging with macro and micronutrient fields, meal filters, sectioned search, recent foods, favorites, custom foods, saved meals, barcode lookup wiring, label scan, and meal photo analysis entry points.
 - Workout plans/templates backed by Room, including create, edit, delete, start, ordered exercises, default sets, rep ranges, and rest times.
 - Active workout mode with per-set weight, reps, RPE, RIR, set type, completion status, previous performance, automatic rest timer, and finish/discard actions.
 - Automatic personal-record detection for highest weight, reps at weight, estimated 1RM, and session volume.
-- Body-weight logging with trend and goal-distance summaries.
-- Progress screens for calories, body weight, and training volume.
+- Body-weight logging with raw values, moving average, trend rate, and goal-distance summaries.
+- Progress analytics for body weight, strength, muscle-group volume, and nutrition adherence.
 - Optional Google sign-in state and local settings.
 - WorkManager sync queue for local-first changes.
 
@@ -27,7 +27,7 @@ The app keeps the existing layered structure:
 - `navigation`: Compose Navigation graph and top-level app shell.
 - `di`: Hilt bindings and app-level providers.
 
-ViewModels primarily own UI state and events. Workout calculations such as double progression, estimated 1RM, active-session construction, and PR detection live in domain use cases.
+ViewModels primarily own UI state and events. Workout calculations such as double progression, estimated 1RM, active-session construction, PR detection, progress analytics, nutrition scaling, and daily coach readiness live in domain use cases.
 
 ## Tech Stack
 
@@ -71,7 +71,7 @@ Useful broader checks:
 ./gradlew assembleDebug
 ```
 
-Current focused coverage includes nutrition scaling, body-weight moving averages, double progression, estimated workout progression suggestions, personal-record detection, and Room migrations through schema version 4.
+Current focused coverage includes meal scaling, daily coach readiness, nutrition adherence, body-weight moving averages, double progression, estimated workout progression suggestions, personal-record detection, and Room migrations through schema version 5.
 
 ## n8n Integration
 
@@ -103,7 +103,7 @@ The rest timer starts automatically when a set is completed and supports add/sub
 
 ## Nutrition System
 
-Nutrition supports manual food logging, meal type selection, favorites, daily target tracking, micronutrients, hydration, label scanning, barcode lookup, and meal-photo analysis entry points. Saved meals/recipes, recent-food ranking, and copy-previous-meal actions remain planned.
+Nutrition supports manual food logging, meal type selection, favorites, recent-food ranking, custom foods with micronutrients, saved meals/recipes, meal scaling, copy-yesterday and copy-previous-meal actions, daily target tracking, hydration, label scanning, barcode lookup, and meal-photo analysis entry points.
 
 ## Optional Health Connect
 
@@ -113,24 +113,23 @@ Health Connect is not yet implemented. It should remain optional when added, wit
 
 Completed:
 
-- Local-first Room repositories and schema migrations through version 4.
+- Local-first Room repositories and schema migrations through version 5.
 - Workout plan create/edit/delete/start.
 - Active workout logging with editable sets, set types, RPE/RIR, previous performance, and rest timer.
 - Personal-record detection from workout history.
 - Domain use cases for workout progression, active-session construction, estimated 1RM, and PR detection.
+- Nutrition search sections for recent, favorites, custom foods, and remote results.
+- Saved meals, scalable recipes, and copy-previous meal actions.
+- Progress analytics for body weight, strength, muscle-group volume, and nutrition adherence.
+- Dashboard coach refactor into smaller explainable use cases.
 
 In Progress:
 
 - Barcode lookup UX hardening.
-- Nutrition search sections for recent, favorites, custom foods, and remote results.
-- Progress analytics expansion for strength and training volume.
-- Dashboard coach refactor into smaller explainable use cases.
+- Barcode scanner empty, retry, unknown-product, and offline state polish.
 
 Planned:
 
-- Saved meals and scalable recipes.
-- Copy yesterday / previous meal actions.
 - Health Connect import/export.
 - Compose UI tests for workout and nutrition flows.
 - Release R8/resource shrinking review and ProGuard hardening.
-- Expanded CI with compile, unit tests, lint, and debug build on pull requests.
