@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn as AndroidXOptIn
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -47,6 +49,7 @@ import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
+@AndroidXOptIn(ExperimentalGetImage::class)
 @Composable
 fun BarcodeScannerScreen(
     onBarcodeDetected: (String) -> Unit,

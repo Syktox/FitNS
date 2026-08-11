@@ -72,6 +72,7 @@ import com.raysix.fitns.feature.scanner.LabelScanScreen
 import com.raysix.fitns.feature.scanner.MealAnalysisScreen
 import com.raysix.fitns.feature.settings.SettingsScreen
 import com.raysix.fitns.feature.settings.SettingsViewModel
+import com.raysix.fitns.feature.workout.ActiveWorkoutScreen
 import com.raysix.fitns.feature.workout.WorkoutHistoryScreen
 import com.raysix.fitns.feature.workout.WorkoutStartScreen
 import com.raysix.fitns.feature.workout.WorkoutViewModel
@@ -90,6 +91,7 @@ private enum class Route(
     BarcodeScan("barcode-scan", "Barcode", Icons.Outlined.QrCodeScanner, Icons.Outlined.QrCodeScanner),
     MealAnalysis("meal-analysis", "Scan Meal", Icons.Outlined.CameraAlt, Icons.Filled.CameraAlt),
     Workout("workout", "Workout", Icons.Outlined.FitnessCenter, Icons.Filled.FitnessCenter),
+    ActiveWorkout("active-workout", "Active", Icons.Outlined.FitnessCenter, Icons.Filled.FitnessCenter),
     BodyWeight("bodyweight", "Weight", Icons.Outlined.MonitorWeight, Icons.Outlined.MonitorWeight),
     Progress("progress", "Progress", Icons.AutoMirrored.Outlined.ShowChart, Icons.AutoMirrored.Filled.ShowChart),
     Recommendations("recommendations", "Tips", Icons.Outlined.Lightbulb, Icons.Outlined.Lightbulb),
@@ -196,8 +198,8 @@ fun FitNsApp() {
                         onCancel = { navController.popBackStack() }
                     )
                 }
-                composable(Route.LabelScan.value) {
-                    val addFoodEntry = remember(navController) { navController.getBackStackEntry(Route.AddFood.value) }
+                composable(Route.LabelScan.value) { backStackEntry ->
+                    val addFoodEntry = remember(backStackEntry) { navController.getBackStackEntry(Route.AddFood.value) }
                     val nutritionViewModel: NutritionViewModel = hiltViewModel(addFoodEntry)
                     LabelScanScreen(
                         onApply = { input ->
@@ -207,8 +209,8 @@ fun FitNsApp() {
                         onCancel = { navController.popBackStack() }
                     )
                 }
-                composable(Route.BarcodeScan.value) {
-                    val addFoodEntry = remember(navController) { navController.getBackStackEntry(Route.AddFood.value) }
+                composable(Route.BarcodeScan.value) { backStackEntry ->
+                    val addFoodEntry = remember(backStackEntry) { navController.getBackStackEntry(Route.AddFood.value) }
                     val nutritionViewModel: NutritionViewModel = hiltViewModel(addFoodEntry)
                     BarcodeScannerScreen(
                         onBarcodeDetected = { barcode ->
@@ -229,9 +231,47 @@ fun FitNsApp() {
                         onAddExercise = viewModel::addExercise,
                         onAddWorkout = viewModel::addWorkout,
                         onSavePlan = viewModel::saveWorkoutPlan,
+                        onUpdatePlan = viewModel::updateWorkoutPlan,
                         onSaveTemplateAsPlan = viewModel::saveTemplateAsPlan,
+                        onStartPlan = { plan ->
+                            viewModel.startWorkoutPlan(plan)
+                            navController.navigate(Route.ActiveWorkout.value)
+                        },
+                        onStartTemplate = { template ->
+                            viewModel.startWorkoutTemplate(template)
+                            navController.navigate(Route.ActiveWorkout.value)
+                        },
                         onDeletePlan = viewModel::deleteWorkoutPlan,
                         onShowHistory = { navController.navigate(Route.History.value) }
+                    )
+                }
+                composable(Route.ActiveWorkout.value) { backStackEntry ->
+                    val workoutEntry = remember(backStackEntry) { navController.getBackStackEntry(Route.Workout.value) }
+                    val viewModel: WorkoutViewModel = hiltViewModel(workoutEntry)
+                    val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+                    ActiveWorkoutScreen(
+                        uiState = uiState,
+                        onBack = { navController.popBackStack() },
+                        onAddExercise = viewModel::addExerciseToActiveSession,
+                        onRemoveExercise = viewModel::removeExerciseFromActiveSession,
+                        onMoveExercise = viewModel::moveExerciseInActiveSession,
+                        onAddSet = viewModel::addSetToActiveExercise,
+                        onDeleteSet = viewModel::deleteSetFromActiveExercise,
+                        onUpdateSet = viewModel::updateActiveSet,
+                        onToggleSetComplete = viewModel::toggleSetCompleted,
+                        onFinish = {
+                            viewModel.finishActiveWorkout {
+                                navController.popBackStack()
+                            }
+                        },
+                        onDiscard = {
+                            viewModel.discardActiveWorkout()
+                            navController.popBackStack()
+                        },
+                        onAddRestTime = viewModel::adjustRestTimer,
+                        onPauseTimer = viewModel::pauseRestTimer,
+                        onResumeTimer = viewModel::resumeRestTimer,
+                        onSkipTimer = viewModel::skipRestTimer
                     )
                 }
                 composable(Route.History.value) {
