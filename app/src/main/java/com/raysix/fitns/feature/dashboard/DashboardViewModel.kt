@@ -3,13 +3,17 @@ package com.raysix.fitns.feature.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.raysix.fitns.core.model.AppResult
+import com.raysix.fitns.domain.model.CoachMetric
 import com.raysix.fitns.domain.model.DailyNutritionDashboard
+import com.raysix.fitns.domain.model.DailyCoachResult
 import com.raysix.fitns.domain.model.NutrientAggregate
 import com.raysix.fitns.domain.model.NutritionFacts
 import com.raysix.fitns.domain.model.NutritionGoal
+import com.raysix.fitns.domain.model.ReadinessResult
 import com.raysix.fitns.domain.repository.NutritionRepository
 import com.raysix.fitns.domain.repository.ProfileRepository
 import com.raysix.fitns.domain.repository.WorkoutRepository
+import com.raysix.fitns.domain.usecase.CalculateDailyCoachUseCase
 import com.raysix.fitns.domain.usecase.NutrientAggregator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -101,7 +105,8 @@ class DashboardViewModel @Inject constructor(
     private val nutritionRepository: NutritionRepository,
     workoutRepository: WorkoutRepository,
     profileRepository: ProfileRepository,
-    aggregator: NutrientAggregator
+    aggregator: NutrientAggregator,
+    private val calculateDailyCoach: CalculateDailyCoachUseCase
 ) : ViewModel() {
     private val message = MutableStateFlow<String?>(null)
 
@@ -112,11 +117,12 @@ class DashboardViewModel @Inject constructor(
         message
     ) { dashboard, workouts, targets, message ->
         val workoutSummary = workouts.todaySummary()
+        val coachResult = calculateDailyCoach(dashboard, workouts)
         DashboardUiState(
             dashboard = dashboard,
             workoutSummary = workoutSummary,
-            readiness = workouts.toReadiness(),
-            coach = dashboard.toCoach(workoutSummary),
+            readiness = coachResult.readiness.toUi(),
+            coach = coachResult.toUi(),
             mealBreakdown = dashboard.toMealBreakdown(),
             micronutrients = aggregator.aggregate(dashboard.entries, targets)
                 .filter { it.hasData && it.hasTarget }
@@ -153,35 +159,7 @@ class DashboardViewModel @Inject constructor(
         )
     }
 
-    private fun List<com.raysix.fitns.domain.model.WorkoutLogEntry>.toReadiness(): DashboardReadiness {
-        if (isEmpty()) return DashboardReadiness()
-        val now = System.currentTimeMillis()
-        val dayMillis = 24L * 60L * 60L * 1000L
-        val weekAgo = now - 7L * dayMillis
-        val weeklySetCount = filter { it.loggedAt >= weekAgo }.sumOf { entry -> entry.sets.sumOf { it.sets } }
-        val latest = maxByOrNull { it.loggedAt }
-        val daysSinceLastWorkout = latest?.let { ((now - it.loggedAt) / dayMillis).toInt().coerceAtLeast(0) }
-
-        val status = when {
-            daysSinceLastWorkout == 0 && weeklySetCount >= 18 -> "Recover"
-            daysSinceLastWorkout == 0 -> "Logged"
-            daysSinceLastWorkout != null && daysSinceLastWorkout >= 3 -> "Ready"
-            weeklySetCount >= 24 -> "Deload"
-            else -> "Ready"
-        }
-        val title = when (status) {
-            "Recover" -> "Recovery priority"
-            "Logged" -> "Workout logged today"
-            "Deload" -> "High weekly load"
-            else -> "Ready to train"
-        }
-        val summary = when (status) {
-            "Recover" -> "You already trained today and weekly volume is high. Keep the next session light."
-            "Logged" -> "Workout is logged for today. Add more only if recovery still feels good."
-            "Deload" -> "Weekly set count is elevated. Consider fewer hard sets or easier loads."
-            else -> "No heavy recent load detected. A planned strength session fits today."
-        }
-
+    private fun ReadinessResult.toUi(): DashboardReadiness {
         return DashboardReadiness(
             title = title,
             summary = summary,
@@ -191,39 +169,18 @@ class DashboardViewModel @Inject constructor(
         )
     }
 
-    private fun DailyNutritionDashboard.toCoach(workoutSummary: DashboardWorkoutSummary): DashboardCoach {
-        val calorieRatio = total.caloriesKcal.ratioTo(goal.caloriesKcal)
-        val proteinRatio = total.proteinGrams.ratioTo(goal.proteinGrams)
-        val waterRatio = waterMilliliters.ratioTo(goal.waterMilliliters)
-        val trainingScore = if (workoutSummary.setCount > 0) 1.0 else 0.0
-        val nutritionScore = listOf(
-            calorieRatio.scoreForRange(0.75, 1.08),
-            proteinRatio.scoreForMinimum(0.75),
-            waterRatio.scoreForMinimum(0.7)
-        ).average()
-        val score = ((nutritionScore * 0.75 + trainingScore * 0.25) * 100).toInt().coerceIn(0, 100)
-        val metrics = listOf(
-            DashboardGoalMetric("Calories", total.caloriesKcal, goal.caloriesKcal, "kcal", calorieRatio.statusForCalories()),
-            DashboardGoalMetric("Protein", total.proteinGrams, goal.proteinGrams, "g", proteinRatio.statusForMinimum()),
-            DashboardGoalMetric("Water", waterMilliliters, goal.waterMilliliters, "ml", waterRatio.statusForMinimum()),
-            DashboardGoalMetric("Workout", workoutSummary.setCount.toDouble(), 1.0, "sets", if (workoutSummary.setCount > 0) "Done" else "Open")
+    private fun DailyCoachResult.toUi(): DashboardCoach {
+        return DashboardCoach(
+            score = score,
+            title = title,
+            summary = summary,
+            focus = focus,
+            metrics = metrics.map { it.toUi() }
         )
-        val focus = when {
-            entries.isEmpty() -> "Log your first meal so the targets become actionable."
-            proteinRatio < 0.65 -> "Prioritize protein at the next meal."
-            waterRatio < 0.6 -> "Add water now and check hydration again later."
-            calorieRatio > 1.1 -> "Keep the rest of the day lighter and protein-forward."
-            workoutSummary.setCount == 0 -> "Add a short strength session or log today's completed sets."
-            else -> "Stay consistent and finish the day close to target."
-        }
-        val title = when {
-            score >= 85 -> "Strong day"
-            score >= 65 -> "On track"
-            score >= 35 -> "Needs attention"
-            else -> "Just getting started"
-        }
-        val summary = "${entries.size} foods, ${workoutSummary.setCount} sets, ${waterMilliliters.toInt()} ml water logged."
-        return DashboardCoach(score = score, title = title, summary = summary, focus = focus, metrics = metrics)
+    }
+
+    private fun CoachMetric.toUi(): DashboardGoalMetric {
+        return DashboardGoalMetric(label = label, value = value, target = target, unit = unit, status = status)
     }
 
     private fun DailyNutritionDashboard.toMealBreakdown(): List<MealBreakdown> {
@@ -240,35 +197,4 @@ class DashboardViewModel @Inject constructor(
             .sortedByDescending { it.caloriesKcal }
     }
 
-    private fun Double.ratioTo(target: Double): Double {
-        return if (target <= 0.0) 0.0 else this / target
-    }
-
-    private fun Double.scoreForMinimum(minimum: Double): Double {
-        return (this / minimum).coerceIn(0.0, 1.0)
-    }
-
-    private fun Double.scoreForRange(minimum: Double, maximum: Double): Double {
-        return when {
-            this < minimum -> (this / minimum).coerceIn(0.0, 1.0)
-            this <= maximum -> 1.0
-            else -> (1.0 - ((this - maximum) / 0.4)).coerceIn(0.0, 1.0)
-        }
-    }
-
-    private fun Double.statusForMinimum(): String {
-        return when {
-            this >= 1.0 -> "Hit"
-            this >= 0.75 -> "Close"
-            else -> "Open"
-        }
-    }
-
-    private fun Double.statusForCalories(): String {
-        return when {
-            this in 0.85..1.05 -> "On target"
-            this < 0.85 -> "Room left"
-            else -> "Over"
-        }
-    }
 }
