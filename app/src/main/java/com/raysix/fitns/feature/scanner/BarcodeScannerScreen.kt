@@ -12,10 +12,12 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -47,6 +49,7 @@ import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 @AndroidXOptIn(ExperimentalGetImage::class)
@@ -58,9 +61,7 @@ fun BarcodeScannerScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val executor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
-    DisposableEffect(Unit) {
-        onDispose { executor.shutdown() }
-    }
+    var boundProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -68,10 +69,17 @@ fun BarcodeScannerScreen(
         )
     }
     var detecting by remember { mutableStateOf(true) }
+    var scanAttempt by remember { mutableStateOf(0) }
+    var statusMessage by remember { mutableStateOf("Align a barcode within the frame") }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
+        statusMessage = if (granted) {
+            "Align a barcode within the frame"
+        } else {
+            "Camera permission is required to scan barcodes."
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -96,12 +104,28 @@ fun BarcodeScannerScreen(
     }
     val scanner = remember { BarcodeScanning.getClient(options) }
     DisposableEffect(Unit) {
-        onDispose { scanner.close() }
+        onDispose {
+            boundProvider?.unbindAll()
+            scanner.close()
+            executor.shutdown()
+        }
+    }
+
+    LaunchedEffect(hasCameraPermission, detecting, scanAttempt) {
+        if (hasCameraPermission && detecting) {
+            delay(8_000)
+            if (detecting) {
+                statusMessage = "No barcode detected yet. Move closer or improve lighting."
+            }
+        }
     }
 
     LaunchedEffect(hasCameraPermission) {
         if (!hasCameraPermission) return@LaunchedEffect
-        val provider = cameraProvider(context)
+        val provider = runCatching { cameraProvider(context) }.getOrElse {
+            statusMessage = "Camera could not be started. Try again."
+            return@LaunchedEffect
+        }
         val preview = Preview.Builder().build().also {
             it.setSurfaceProvider(previewView.surfaceProvider)
         }
@@ -124,13 +148,22 @@ fun BarcodeScannerScreen(
                     val code = barcodes.firstOrNull()?.rawValue
                     if (code != null && detecting) {
                         detecting = false
+                        statusMessage = "Barcode detected. Looking up product..."
                         onBarcodeDetected(code)
                     }
+                }
+                .addOnFailureListener {
+                    statusMessage = "Scan failed. Try again."
                 }
                 .addOnCompleteListener { imageProxy.close() }
         }
         provider.unbindAll()
-        provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+        runCatching {
+            provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+            boundProvider = provider
+        }.onFailure {
+            statusMessage = "Camera could not be started. Try again."
+        }
     }
 
     Box(
@@ -197,13 +230,42 @@ fun BarcodeScannerScreen(
             )
         }
 
-        Text(
-            text = "Align a barcode within the frame",
-            color = Color.White,
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp)
-        )
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = statusMessage,
+                color = Color.White,
+                textAlign = TextAlign.Center
+            )
+            if (hasCameraPermission && !detecting) {
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                ) {
+                    Surface(
+                        onClick = {
+                            detecting = true
+                            scanAttempt += 1
+                            statusMessage = "Align a barcode within the frame"
+                        },
+                        shape = RoundedCornerShape(50),
+                        color = Color(0xCC2A2A2A)
+                    ) {
+                        Text(
+                            text = "Retry scan",
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
