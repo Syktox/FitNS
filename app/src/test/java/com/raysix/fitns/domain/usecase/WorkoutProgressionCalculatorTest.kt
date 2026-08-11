@@ -21,6 +21,7 @@ class WorkoutProgressionCalculatorTest {
         )
 
         assertEquals(ProgressionAction.IncreaseWeight, result.action)
+        assertEquals(52.5, result.suggestedWeightKg ?: 0.0, 0.001)
     }
 
     @Test
@@ -35,5 +36,19 @@ class WorkoutProgressionCalculatorTest {
 
         assertEquals(ProgressionAction.ConsiderRecovery, result.action)
     }
-}
 
+    @Test
+    fun recommend_keepWeightWhenTopRepsButRirShowsHighEffort() {
+        val result = calculator.recommend(
+            completedSets = listOf(
+                WorkoutSetInput(weightKg = 100.0, repetitions = 12, rpe = null, rir = 0),
+                WorkoutSetInput(weightKg = 100.0, repetitions = 12, rpe = null, rir = 1),
+                WorkoutSetInput(weightKg = 100.0, repetitions = 12, rpe = null, rir = 1)
+            ),
+            targetRepMin = 8,
+            targetRepMax = 12
+        )
+
+        assertEquals(ProgressionAction.KeepWeight, result.action)
+    }
+}
