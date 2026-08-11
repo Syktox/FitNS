@@ -331,6 +331,8 @@ fun FitNsApp() {
                     SettingsScreen(
                         uiState = uiState,
                         onN8nBaseUrlChange = viewModel::updateN8nBaseUrl,
+                        onBearerTokenChange = viewModel::updateBearerToken,
+                        onSaveBearerToken = viewModel::saveBearerToken,
                         onSyncEnabledChange = viewModel::updateSyncEnabled,
                         onTemporaryPhotosOnlyChange = viewModel::updateTemporaryPhotosOnly,
                         onTestConnection = viewModel::testConnection,

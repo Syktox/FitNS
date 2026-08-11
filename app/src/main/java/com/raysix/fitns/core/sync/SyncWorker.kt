@@ -67,6 +67,7 @@ class SyncWorker @AssistedInject constructor(
             EntityTypeFoodEntry -> service.syncNutrition(authorization, item.idempotencyKey, body)
             EntityTypeWorkout -> service.syncWorkout(authorization, item.idempotencyKey, body)
             EntityTypeBodyWeight -> service.syncBodyWeight(authorization, item.idempotencyKey, body)
+            EntityTypeUserProfile -> service.syncProfile(authorization, item.idempotencyKey, body)
             else -> error("Unsupported sync entity type: ${item.entityType}")
         }
         if (!response.isSuccessful) {
@@ -108,6 +109,6 @@ class SyncWorker @AssistedInject constructor(
         const val EntityTypeFoodEntry = "FoodEntry"
         const val EntityTypeWorkout = "Workout"
         const val EntityTypeBodyWeight = "BodyWeight"
+        const val EntityTypeUserProfile = "UserProfile"
     }
 }
-

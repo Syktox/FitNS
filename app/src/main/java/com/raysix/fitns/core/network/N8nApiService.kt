@@ -45,6 +45,13 @@ interface N8nApiService {
         @Header("Idempotency-Key") idempotencyKey: String,
         @Body payload: RequestBody
     ): Response<Unit>
+
+    @POST("webhook/profile/sync")
+    suspend fun syncProfile(
+        @Header("Authorization") authorization: String?,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body payload: RequestBody
+    ): Response<Unit>
 }
 
 data class BarcodeRequest(
