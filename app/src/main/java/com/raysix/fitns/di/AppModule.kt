@@ -8,6 +8,7 @@ import com.raysix.fitns.data.local.FitNsDatabase
 import com.raysix.fitns.data.local.Migration1To2
 import com.raysix.fitns.data.local.Migration2To3
 import com.raysix.fitns.data.local.Migration3To4
+import com.raysix.fitns.data.local.Migration4To5
 import com.raysix.fitns.data.local.dao.BodyWeightDao
 import com.raysix.fitns.data.local.dao.FoodDao
 import com.raysix.fitns.data.local.dao.ProfileDao
@@ -51,7 +52,7 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FitNsDatabase {
         return Room.databaseBuilder(context, FitNsDatabase::class.java, "fitns.db")
-            .addMigrations(Migration1To2, Migration2To3, Migration3To4)
+            .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5)
             .build()
     }
 

@@ -169,14 +169,26 @@ fun FitNsApp() {
                         dashboard = uiState.dashboard,
                         foodHistory = uiState.foodHistory,
                         foodFavorites = uiState.foodFavorites,
+                        foodSearch = uiState.foodSearch,
+                        savedMeals = uiState.savedMeals,
                         micronutrients = uiState.micronutrients,
                         errorMessage = uiState.errorMessage,
+                        confirmationMessage = uiState.confirmationMessage,
                         onAddFood = { navController.navigate(Route.AddFood.value) },
+                        onFoodSearchQueryChange = viewModel::updateFoodSearchQuery,
                         onDuplicateFood = viewModel::duplicateFood,
                         onDeleteFood = viewModel::deleteFood,
                         onUseFavorite = viewModel::useFavorite,
                         onSaveFavorite = viewModel::saveFavorite,
-                        onDeleteFavorite = viewModel::deleteFavorite
+                        onDeleteFavorite = viewModel::deleteFavorite,
+                        onUseCustomFood = viewModel::useCustomFood,
+                        onSaveCustomFood = viewModel::saveCustomFood,
+                        onDeleteCustomFood = viewModel::deleteCustomFood,
+                        onSaveTodayAsMeal = viewModel::saveTodayAsMeal,
+                        onLogSavedMeal = viewModel::logSavedMeal,
+                        onDeleteSavedMeal = viewModel::deleteSavedMeal,
+                        onCopyYesterday = viewModel::copyYesterday,
+                        onCopyPreviousMeal = viewModel::copyPreviousMeal
                     )
                 }
                 composable(Route.AddFood.value) {

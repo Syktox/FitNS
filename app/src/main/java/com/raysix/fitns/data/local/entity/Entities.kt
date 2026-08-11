@@ -83,6 +83,8 @@ data class FoodProductEntity(
     val servingSizeGrams: Double?,
     val notes: String,
     val isFavorite: Boolean,
+    val isCustom: Boolean = false,
+    val micronutrientsJson: String? = null,
     val createdAt: Long,
     val updatedAt: Long,
     val deletedAt: Long?,
@@ -109,6 +111,49 @@ data class MealEntity(
     val name: String,
     val type: String,
     val loggedAt: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val deletedAt: Long?,
+    val syncStatus: SyncStatus,
+    val serverVersion: Long?
+)
+
+@Entity(tableName = "saved_meals")
+data class SavedMealEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val deletedAt: Long?,
+    val syncStatus: SyncStatus,
+    val serverVersion: Long?
+)
+
+@Entity(
+    tableName = "saved_meal_items",
+    indices = [Index(value = ["savedMealId"])]
+)
+data class SavedMealItemEntity(
+    @PrimaryKey val id: String,
+    val savedMealId: String,
+    val foodEntrySnapshotId: String,
+    val name: String,
+    val brand: String?,
+    val mealType: String,
+    val grams: Double,
+    val caloriesKcal: Double,
+    val proteinGrams: Double,
+    val carbohydratesGrams: Double,
+    val sugarGrams: Double,
+    val fatGrams: Double,
+    val saturatedFatGrams: Double,
+    val fiberGrams: Double,
+    val saltGrams: Double,
+    val sodiumMilligrams: Double?,
+    val micronutrientsJson: String?,
+    val notes: String,
+    val dataQuality: String,
+    val sortOrder: Int,
     val createdAt: Long,
     val updatedAt: Long,
     val deletedAt: Long?,

@@ -8,10 +8,12 @@ import com.raysix.fitns.domain.model.Exercise
 import com.raysix.fitns.domain.model.FoodLogEntry
 import com.raysix.fitns.domain.model.FoodFavoritePreset
 import com.raysix.fitns.domain.model.FoodProductLookup
+import com.raysix.fitns.domain.model.CustomFood
 import com.raysix.fitns.domain.model.GoogleAccount
 import com.raysix.fitns.domain.model.MealAnalysisResult
 import com.raysix.fitns.domain.model.NutrientTarget
 import com.raysix.fitns.domain.model.NutritionGoal
+import com.raysix.fitns.domain.model.SavedMeal
 import com.raysix.fitns.domain.model.ActiveWorkoutSession
 import com.raysix.fitns.domain.model.UserProfile
 import com.raysix.fitns.domain.model.VersionedNutritionGoal
@@ -23,10 +25,18 @@ interface NutritionRepository {
     fun observeToday(): Flow<DailyNutritionDashboard>
     fun observeFoodHistory(): Flow<List<FoodLogEntry>>
     fun observeFoodFavorites(): Flow<List<FoodFavoritePreset>>
+    fun observeCustomFoods(): Flow<List<CustomFood>>
+    fun observeSavedMeals(): Flow<List<SavedMeal>>
     suspend fun addFood(entry: FoodLogEntry): AppResult<Unit>
     suspend fun updateFood(entry: FoodLogEntry): AppResult<Unit>
     suspend fun saveFavorite(entry: FoodLogEntry): AppResult<Unit>
     suspend fun deleteFavorite(favorite: FoodFavoritePreset): AppResult<Unit>
+    suspend fun saveCustomFood(entry: FoodLogEntry): AppResult<Unit>
+    suspend fun deleteCustomFood(customFood: CustomFood): AppResult<Unit>
+    suspend fun saveMeal(meal: SavedMeal): AppResult<Unit>
+    suspend fun deleteSavedMeal(meal: SavedMeal): AppResult<Unit>
+    suspend fun logSavedMeal(meal: SavedMeal, scaleFactor: Double, mealType: com.raysix.fitns.domain.model.MealType): AppResult<Unit>
+    suspend fun copyEntries(entries: List<FoodLogEntry>, mealType: com.raysix.fitns.domain.model.MealType? = null): AppResult<Unit>
     suspend fun addWater(milliliters: Double): AppResult<Unit>
     suspend fun deleteFood(entry: FoodLogEntry): AppResult<Unit>
 }
