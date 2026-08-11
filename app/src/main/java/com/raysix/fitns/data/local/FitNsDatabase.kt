@@ -62,7 +62,7 @@ import com.raysix.fitns.domain.model.Micronutrients
         ImageAnalysisResultEntity::class,
         BarcodeScanResultEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(FitNsTypeConverters::class)
@@ -87,4 +87,3 @@ class FitNsTypeConverters {
     @TypeConverter
     fun stringToMicronutrients(value: String?): Micronutrients = MicronutrientsCodec.decode(value)
 }
-

@@ -91,4 +91,52 @@ class MigrationTest {
         helper.createDatabase(TEST_DB, 1).use { }
         helper.runMigrationsAndValidate(TEST_DB, 3, true, Migration1To2, Migration2To3)
     }
+
+    @Test
+    fun migrate3To4_addsWorkoutSessionMetadataDefaults() {
+        helper.createDatabase(TEST_DB, 3).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO workout_exercises (
+                    id, workoutId, exerciseId, notes, createdAt, updatedAt, syncStatus
+                ) VALUES (
+                    'workout-exercise-1', 'workout-1', 'exercise-1', '',
+                    1700000000000, 1700000000000, 'Synced'
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO workout_sets (
+                    id, workoutExerciseId, weightKg, repetitions, setCount,
+                    isWarmup, isPerSide, createdAt, updatedAt, syncStatus
+                ) VALUES (
+                    'set-1', 'workout-exercise-1', 100.0, 8, 1,
+                    0, 0, 1700000000000, 1700000000000, 'Synced'
+                )
+                """.trimIndent()
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migration3To4)
+
+        migrated.use { db ->
+            db.query("SELECT sortOrder FROM workout_exercises WHERE id = 'workout-exercise-1'").use { cursor ->
+                cursor.moveToFirst()
+                assert(cursor.getInt(0) == 0)
+            }
+            db.query("SELECT setType, completedAt, restSeconds FROM workout_sets WHERE id = 'set-1'").use { cursor ->
+                cursor.moveToFirst()
+                assert(cursor.getString(0) == "Normal")
+                assert(cursor.isNull(1))
+                assert(cursor.getInt(2) == 90)
+            }
+        }
+    }
+
+    @Test
+    fun migrate1To4_runsChainedMigrations() {
+        helper.createDatabase(TEST_DB, 1).use { }
+        helper.runMigrationsAndValidate(TEST_DB, 4, true, Migration1To2, Migration2To3, Migration3To4)
+    }
 }

@@ -70,3 +70,12 @@ val Migration2To3 = object : Migration(2, 3) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_nutrition_goals_userProfileId_validFrom` ON `nutrition_goals` (`userProfileId`, `validFrom`)")
     }
 }
+
+val Migration3To4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE workout_exercises ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE workout_sets ADD COLUMN setType TEXT NOT NULL DEFAULT 'Normal'")
+        db.execSQL("ALTER TABLE workout_sets ADD COLUMN completedAt INTEGER")
+        db.execSQL("ALTER TABLE workout_sets ADD COLUMN restSeconds INTEGER NOT NULL DEFAULT 90")
+    }
+}

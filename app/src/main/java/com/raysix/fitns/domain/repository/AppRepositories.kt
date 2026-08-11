@@ -12,6 +12,7 @@ import com.raysix.fitns.domain.model.GoogleAccount
 import com.raysix.fitns.domain.model.MealAnalysisResult
 import com.raysix.fitns.domain.model.NutrientTarget
 import com.raysix.fitns.domain.model.NutritionGoal
+import com.raysix.fitns.domain.model.ActiveWorkoutSession
 import com.raysix.fitns.domain.model.UserProfile
 import com.raysix.fitns.domain.model.VersionedNutritionGoal
 import com.raysix.fitns.domain.model.WorkoutLogEntry
@@ -36,6 +37,7 @@ interface WorkoutRepository {
     fun observeWorkoutPlans(): Flow<List<WorkoutPlan>>
     suspend fun addExercise(exercise: Exercise): AppResult<Unit>
     suspend fun addWorkout(entry: WorkoutLogEntry): AppResult<Unit>
+    suspend fun saveWorkoutSession(session: ActiveWorkoutSession): AppResult<Unit>
     suspend fun saveWorkoutPlan(plan: WorkoutPlan): AppResult<Unit>
     suspend fun deleteWorkoutPlan(plan: WorkoutPlan): AppResult<Unit>
     suspend fun deleteWorkout(entry: WorkoutLogEntry): AppResult<Unit>
