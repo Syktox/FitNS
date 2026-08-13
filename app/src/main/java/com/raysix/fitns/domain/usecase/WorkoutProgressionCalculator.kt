@@ -47,8 +47,8 @@ class WorkoutProgressionCalculator {
                 "Several signals point to high fatigue. Check recovery before pushing harder."
             )
             anyBelowMin -> ProgressionRecommendation(
-                ProgressionAction.ReduceWeight,
-                "The lower rep target was missed."
+                ProgressionAction.KeepWeight,
+                "The lower rep target was missed. Keep the current load and rebuild reps."
             )
             else -> ProgressionRecommendation(
                 ProgressionAction.IncreaseRepetitions,

@@ -51,4 +51,18 @@ class WorkoutProgressionCalculatorTest {
 
         assertEquals(ProgressionAction.KeepWeight, result.action)
     }
+
+    @Test
+    fun recommend_keepWeightWhenPerformanceDropsWithoutHighFatigue() {
+        val result = calculator.recommend(
+            completedSets = listOf(
+                WorkoutSetInput(weightKg = 100.0, repetitions = 7, rpe = 8),
+                WorkoutSetInput(weightKg = 100.0, repetitions = 8, rpe = 8)
+            ),
+            targetRepMin = 8,
+            targetRepMax = 12
+        )
+
+        assertEquals(ProgressionAction.KeepWeight, result.action)
+    }
 }
