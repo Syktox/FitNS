@@ -59,20 +59,22 @@ class LocalWorkoutRepository @Inject constructor(
             workoutDao.observeWorkoutExercises(),
             workoutDao.observeWorkoutSets()
         ) { exercises, workoutExercises, sets ->
-            sets.mapNotNull { set ->
-                val workoutExercise = workoutExercises.firstOrNull { it.id == set.workoutExerciseId }
-                val exercise = exercises.firstOrNull { it.id == workoutExercise?.exerciseId }
-                if (exercise == null) {
-                    null
-                } else {
-                    WorkoutLogEntry(
-                        id = workoutExercise?.workoutId ?: set.id,
-                        exercise = exercise,
-                        sets = listOf(set.toDomain()),
-                        notes = workoutExercise?.notes.orEmpty(),
-                        loggedAt = set.createdAt
-                    )
+            workoutExercises.mapNotNull { workoutExercise ->
+                val exercise = exercises.firstOrNull { it.id == workoutExercise.exerciseId }
+                    ?: return@mapNotNull null
+                val exerciseSets = sets
+                    .filter { it.workoutExerciseId == workoutExercise.id }
+                    .sortedWith(compareBy<WorkoutSetEntity> { it.setCount }.thenBy { it.createdAt })
+                if (exerciseSets.isEmpty()) {
+                    return@mapNotNull null
                 }
+                WorkoutLogEntry(
+                    id = workoutExercise.workoutId,
+                    exercise = exercise,
+                    sets = exerciseSets.map { it.toDomain() },
+                    notes = workoutExercise.notes,
+                    loggedAt = exerciseSets.maxOf { it.createdAt }
+                )
             }
         }
     }

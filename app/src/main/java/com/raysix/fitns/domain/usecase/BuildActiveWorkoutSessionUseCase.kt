@@ -17,24 +17,26 @@ class BuildActiveWorkoutSessionUseCase @Inject constructor() {
                 val previousEntry = history
                     .filter { it.exercise.id == planExercise.exercise.id }
                     .maxByOrNull { it.loggedAt }
-                val previous = previousEntry
+                val previousSets = previousEntry
                     ?.sets
-                    ?.firstOrNull()
-                    ?.let { set ->
-                        PreviousPerformance(
-                            exerciseId = planExercise.exercise.id,
-                            weightKg = set.weightKg,
-                            repetitions = set.repetitions,
-                            loggedAt = previousEntry.loggedAt
-                        )
-                    }
+                    .orEmpty()
+                    .filter { it.setType != com.raysix.fitns.domain.model.WorkoutSetType.WarmUp }
                 ActiveWorkoutExercise(
                     exercise = planExercise.exercise,
                     sortOrder = index,
                     targetRepMin = planExercise.targetRepMin,
                     targetRepMax = planExercise.targetRepMax,
                     restSeconds = planExercise.restSeconds,
-                    sets = (1..planExercise.targetSets).map { setNumber ->
+                    sets = (1..planExercise.targetSets).mapIndexed { setIndex, setNumber ->
+                        val previousSet = previousSets.getOrNull(setIndex) ?: previousSets.lastOrNull()
+                        val previous = previousSet?.let { set ->
+                            PreviousPerformance(
+                                exerciseId = planExercise.exercise.id,
+                                weightKg = set.weightKg,
+                                repetitions = set.repetitions,
+                                loggedAt = previousEntry?.loggedAt ?: 0L
+                            )
+                        }
                         ActiveWorkoutSet(
                             setNumber = setNumber,
                             weightKg = previous?.weightKg ?: 0.0,
