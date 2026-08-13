@@ -2,6 +2,8 @@ package com.raysix.fitns.data.repository
 
 import com.raysix.fitns.core.model.AppError
 import com.raysix.fitns.core.model.AppResult
+import com.raysix.fitns.core.sync.SyncPayloadFactory
+import com.raysix.fitns.core.sync.SyncQueueWriter
 import com.raysix.fitns.data.local.dao.ProfileDao
 import com.raysix.fitns.data.local.entity.SyncStatus
 import com.raysix.fitns.domain.model.DefaultNutrientTargets
@@ -17,7 +19,9 @@ import java.util.UUID
 import javax.inject.Inject
 
 class LocalProfileRepository @Inject constructor(
-    private val profileDao: ProfileDao
+    private val profileDao: ProfileDao,
+    private val syncQueueWriter: SyncQueueWriter,
+    private val syncPayloadFactory: SyncPayloadFactory
 ) : ProfileRepository {
     override fun observeProfile(): Flow<UserProfile> {
         return profileDao.observeProfile(DefaultUserProfileId).map { entity ->
@@ -57,7 +61,14 @@ class LocalProfileRepository @Inject constructor(
     override suspend fun saveProfile(profile: UserProfile): AppResult<Unit> {
         val error = validateProfile(profile)
         if (error != null) return AppResult.Failure(error)
-        profileDao.upsertProfile(profile.copy(id = DefaultUserProfileId).toEntity())
+        val savedProfile = profile.copy(id = DefaultUserProfileId)
+        profileDao.upsertProfile(savedProfile.toEntity())
+        syncQueueWriter.enqueue(
+            entityType = EntityTypeUserProfile,
+            entityId = savedProfile.id,
+            operation = OperationUpsert,
+            payloadJson = syncPayloadFactory.profile(savedProfile, OperationUpsert)
+        )
         return AppResult.Success(Unit)
     }
 
@@ -101,5 +112,10 @@ class LocalProfileRepository @Inject constructor(
             goal.waterMilliliters !in 0.0..10000.0 -> AppError.Validation("Water goal looks implausible.")
             else -> null
         }
+    }
+
+    private companion object {
+        const val EntityTypeUserProfile = "UserProfile"
+        const val OperationUpsert = "upsert"
     }
 }

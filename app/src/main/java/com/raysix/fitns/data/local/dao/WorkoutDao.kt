@@ -21,7 +21,7 @@ interface WorkoutDao {
     @Query("SELECT * FROM workout_sets WHERE deletedAt IS NULL ORDER BY createdAt DESC")
     fun observeWorkoutSets(): Flow<List<WorkoutSetEntity>>
 
-    @Query("SELECT * FROM workout_exercises WHERE deletedAt IS NULL ORDER BY createdAt DESC")
+    @Query("SELECT * FROM workout_exercises WHERE deletedAt IS NULL ORDER BY createdAt DESC, sortOrder ASC")
     fun observeWorkoutExercises(): Flow<List<WorkoutExerciseEntity>>
 
     @Query("SELECT * FROM workout_plans WHERE deletedAt IS NULL ORDER BY updatedAt DESC")
@@ -40,10 +40,16 @@ interface WorkoutDao {
     suspend fun upsertWorkoutExercise(workoutExercise: WorkoutExerciseEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertWorkoutExercises(workoutExercises: List<WorkoutExerciseEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertExercise(exercise: ExerciseEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertWorkoutSet(set: WorkoutSetEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertWorkoutSets(sets: List<WorkoutSetEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertWorkoutPlan(plan: WorkoutPlanEntity)
@@ -85,6 +91,19 @@ interface WorkoutDao {
         upsertWorkout(workout)
         upsertWorkoutExercise(workoutExercise)
         upsertWorkoutSet(set)
+    }
+
+    @Transaction
+    suspend fun addWorkoutSession(
+        exercises: List<ExerciseEntity>,
+        workout: WorkoutEntity,
+        workoutExercises: List<WorkoutExerciseEntity>,
+        sets: List<WorkoutSetEntity>
+    ) {
+        exercises.forEach { upsertExercise(it) }
+        upsertWorkout(workout)
+        upsertWorkoutExercises(workoutExercises)
+        upsertWorkoutSets(sets)
     }
 
     @Query("UPDATE workouts SET deletedAt = :deletedAt, updatedAt = :deletedAt, syncStatus = 'PendingSync' WHERE id = :workoutId")

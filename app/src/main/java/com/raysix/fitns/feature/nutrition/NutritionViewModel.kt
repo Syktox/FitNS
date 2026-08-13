@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.raysix.fitns.core.model.AppError
 import com.raysix.fitns.core.model.AppResult
+import com.raysix.fitns.domain.model.CustomFood
 import com.raysix.fitns.domain.model.DailyNutritionDashboard
 import com.raysix.fitns.domain.model.DataQuality
+import com.raysix.fitns.domain.model.FoodSearchSections
 import com.raysix.fitns.domain.model.FoodFavoritePreset
 import com.raysix.fitns.domain.model.FoodLogEntry
 import com.raysix.fitns.domain.model.FoodProductLookup
@@ -13,6 +15,8 @@ import com.raysix.fitns.domain.model.MealType
 import com.raysix.fitns.domain.model.NutrientAggregate
 import com.raysix.fitns.domain.model.NutritionFacts
 import com.raysix.fitns.domain.model.NutritionGoal
+import com.raysix.fitns.domain.model.SavedMeal
+import com.raysix.fitns.domain.model.SavedMealItem
 import com.raysix.fitns.domain.repository.N8nRepository
 import com.raysix.fitns.domain.repository.NutritionRepository
 import com.raysix.fitns.domain.repository.ProfileRepository
@@ -28,14 +32,21 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import javax.inject.Inject
 
 data class NutritionUiState(
     val dashboard: DailyNutritionDashboard = EmptyNutritionDashboard,
     val foodHistory: List<FoodLogEntry> = emptyList(),
     val foodFavorites: List<FoodFavoritePreset> = emptyList(),
+    val customFoods: List<CustomFood> = emptyList(),
+    val savedMeals: List<SavedMeal> = emptyList(),
+    val foodSearch: FoodSearchSections = FoodSearchSections(),
     val micronutrients: List<NutrientAggregate> = emptyList(),
     val errorMessage: String? = null,
+    val confirmationMessage: String? = null,
     val barcodeLookup: BarcodeLookupUiState = BarcodeLookupUiState()
 )
 
@@ -43,7 +54,21 @@ private data class NutritionCore(
     val dashboard: DailyNutritionDashboard,
     val foodHistory: List<FoodLogEntry>,
     val foodFavorites: List<FoodFavoritePreset>,
+    val customFoods: List<CustomFood>,
+    val savedMeals: List<SavedMeal>,
     val micronutrients: List<NutrientAggregate>
+)
+
+private data class NutritionPrimarySources(
+    val dashboard: DailyNutritionDashboard,
+    val foodHistory: List<FoodLogEntry>,
+    val foodFavorites: List<FoodFavoritePreset>
+)
+
+private data class NutritionSecondarySources(
+    val customFoods: List<CustomFood>,
+    val savedMeals: List<SavedMeal>,
+    val nutrientTargets: List<com.raysix.fitns.domain.model.NutrientTarget>
 )
 
 data class BarcodeLookupUiState(
@@ -76,33 +101,60 @@ class NutritionViewModel @Inject constructor(
     aggregator: NutrientAggregator
 ) : ViewModel() {
     private val errorMessage = MutableStateFlow<String?>(null)
+    private val confirmationMessage = MutableStateFlow<String?>(null)
     private val barcodeLookup = MutableStateFlow(BarcodeLookupUiState())
+    private val foodSearchQuery = MutableStateFlow("")
 
     val uiState: StateFlow<NutritionUiState> = combine(
         combine(
             nutritionRepository.observeToday(),
-            nutritionRepository.observeFoodHistory().map { entries -> entries.distinctBy { it.name to it.brand }.take(30) },
-            nutritionRepository.observeFoodFavorites(),
-            profileRepository.observeNutrientTargets()
-        ) { dashboard, history, favorites, targets ->
-            NutritionCore(
+            nutritionRepository.observeFoodHistory(),
+            nutritionRepository.observeFoodFavorites()
+        ) { dashboard, history, favorites ->
+            NutritionPrimarySources(
                 dashboard = dashboard,
                 foodHistory = history,
-                foodFavorites = favorites,
-                micronutrients = aggregator.aggregate(dashboard.entries, targets)
+                foodFavorites = favorites
+            )
+        }.combine(
+            combine(
+            nutritionRepository.observeCustomFoods(),
+            nutritionRepository.observeSavedMeals(),
+            profileRepository.observeNutrientTargets()
+            ) { customFoods, savedMeals, targets ->
+                NutritionSecondarySources(
+                    customFoods = customFoods,
+                    savedMeals = savedMeals,
+                    nutrientTargets = targets
+                )
+            }
+        ) { primary, secondary ->
+            NutritionCore(
+                dashboard = primary.dashboard,
+                foodHistory = primary.foodHistory,
+                foodFavorites = primary.foodFavorites,
+                customFoods = secondary.customFoods,
+                savedMeals = secondary.savedMeals,
+                micronutrients = aggregator.aggregate(primary.dashboard.entries, secondary.nutrientTargets)
                     .filter { it.hasData && it.hasTarget }
                     .sortedBy { it.key.label }
             )
         },
         errorMessage,
+        confirmationMessage,
+        foodSearchQuery,
         barcodeLookup
-    ) { core, error, lookup ->
+    ) { core, error, confirmation, searchQuery, lookup ->
         NutritionUiState(
             dashboard = core.dashboard,
-            foodHistory = core.foodHistory,
+            foodHistory = core.foodHistory.distinctBy { it.name to it.brand }.take(30),
             foodFavorites = core.foodFavorites,
+            customFoods = core.customFoods,
+            savedMeals = core.savedMeals,
+            foodSearch = core.toSearchSections(searchQuery),
             micronutrients = core.micronutrients,
             errorMessage = error,
+            confirmationMessage = confirmation,
             barcodeLookup = lookup
         )
     }.stateIn(
@@ -116,6 +168,10 @@ class NutritionViewModel @Inject constructor(
             barcode = barcode,
             statusMessage = null
         )
+    }
+
+    fun updateFoodSearchQuery(query: String) {
+        foodSearchQuery.value = query
     }
 
     fun onBarcodeScanned(barcode: String) {
@@ -252,6 +308,19 @@ class NutritionViewModel @Inject constructor(
         }
     }
 
+    fun useCustomFood(customFood: CustomFood, mealType: MealType = MealType.Snack) {
+        viewModelScope.launch {
+            val result = nutritionRepository.addFood(customFood.toFoodLogEntry(mealType))
+            errorMessage.value = when (result) {
+                is AppResult.Success -> {
+                    confirmationMessage.value = "${customFood.name} logged."
+                    null
+                }
+                is AppResult.Failure -> "Custom food could not be logged."
+            }
+        }
+    }
+
     fun useFavorite(favorite: FoodFavoritePreset) {
         viewModelScope.launch {
             val result = nutritionRepository.addFood(favorite.toFoodLogEntry())
@@ -272,6 +341,81 @@ class NutritionViewModel @Inject constructor(
         }
     }
 
+    fun saveCustomFood(entry: FoodLogEntry) {
+        viewModelScope.launch {
+            val result = nutritionRepository.saveCustomFood(entry)
+            errorMessage.value = when (result) {
+                is AppResult.Success -> {
+                    confirmationMessage.value = "${entry.name} saved as a custom food."
+                    null
+                }
+                is AppResult.Failure -> result.error.toFavoriteMessage("Custom food could not be saved.")
+            }
+        }
+    }
+
+    fun deleteCustomFood(customFood: CustomFood) {
+        viewModelScope.launch {
+            val result = nutritionRepository.deleteCustomFood(customFood)
+            errorMessage.value = when (result) {
+                is AppResult.Success -> null
+                is AppResult.Failure -> "Custom food could not be deleted."
+            }
+        }
+    }
+
+    fun saveTodayAsMeal(name: String) {
+        val entries = uiState.value.dashboard.entries
+        viewModelScope.launch {
+            val result = nutritionRepository.saveMeal(
+                SavedMeal(
+                    name = name.ifBlank { "Saved Meal" },
+                    items = entries.map { SavedMealItem(food = it) }
+                )
+            )
+            errorMessage.value = when (result) {
+                is AppResult.Success -> {
+                    confirmationMessage.value = "Meal saved."
+                    null
+                }
+                is AppResult.Failure -> result.error.toFavoriteMessage("Meal could not be saved.")
+            }
+        }
+    }
+
+    fun logSavedMeal(meal: SavedMeal, scaleFactor: Double, mealType: MealType) {
+        viewModelScope.launch {
+            val result = nutritionRepository.logSavedMeal(meal, scaleFactor, mealType)
+            errorMessage.value = when (result) {
+                is AppResult.Success -> {
+                    confirmationMessage.value = "${meal.name} logged."
+                    null
+                }
+                is AppResult.Failure -> result.error.toFavoriteMessage("Meal could not be logged.")
+            }
+        }
+    }
+
+    fun deleteSavedMeal(meal: SavedMeal) {
+        viewModelScope.launch {
+            val result = nutritionRepository.deleteSavedMeal(meal)
+            errorMessage.value = when (result) {
+                is AppResult.Success -> null
+                is AppResult.Failure -> "Saved meal could not be deleted."
+            }
+        }
+    }
+
+    fun copyYesterday() {
+        val entries = uiState.value.foodHistory.previousDayEntries()
+        copyEntries(entries, successMessage = "Yesterday copied.")
+    }
+
+    fun copyPreviousMeal(mealType: MealType) {
+        val entries = uiState.value.foodHistory.previousMealEntries(mealType)
+        copyEntries(entries, mealType, "Previous ${mealType.name.lowercase()} copied.")
+    }
+
     fun deleteFavorite(favorite: FoodFavoritePreset) {
         viewModelScope.launch {
             val result = nutritionRepository.deleteFavorite(favorite)
@@ -288,6 +432,19 @@ class NutritionViewModel @Inject constructor(
             errorMessage.value = when (result) {
                 is AppResult.Success -> null
                 is AppResult.Failure -> "Entry could not be deleted."
+            }
+        }
+    }
+
+    private fun copyEntries(entries: List<FoodLogEntry>, mealType: MealType? = null, successMessage: String) {
+        viewModelScope.launch {
+            val result = nutritionRepository.copyEntries(entries, mealType)
+            errorMessage.value = when (result) {
+                is AppResult.Success -> {
+                    confirmationMessage.value = successMessage
+                    null
+                }
+                is AppResult.Failure -> result.error.toFavoriteMessage("Food entries could not be copied.")
             }
         }
     }
@@ -334,6 +491,69 @@ class NutritionViewModel @Inject constructor(
             dataQuality = DataQuality.Verified,
             notes = notes
         )
+    }
+
+    private fun CustomFood.toFoodLogEntry(mealType: MealType): FoodLogEntry {
+        val factor = servingSizeGrams / 100.0
+        return FoodLogEntry(
+            name = name,
+            brand = brand,
+            mealType = mealType,
+            grams = servingSizeGrams,
+            nutrition = NutritionFacts(
+                caloriesKcal = nutritionPer100g.caloriesKcal * factor,
+                proteinGrams = nutritionPer100g.proteinGrams * factor,
+                carbohydratesGrams = nutritionPer100g.carbohydratesGrams * factor,
+                sugarGrams = nutritionPer100g.sugarGrams * factor,
+                fatGrams = nutritionPer100g.fatGrams * factor,
+                saturatedFatGrams = nutritionPer100g.saturatedFatGrams * factor,
+                fiberGrams = nutritionPer100g.fiberGrams * factor,
+                saltGrams = nutritionPer100g.saltGrams * factor,
+                sodiumMilligrams = nutritionPer100g.sodiumMilligrams?.times(factor)
+            ),
+            dataQuality = DataQuality.Verified,
+            notes = notes,
+            micronutrients = micronutrients
+        )
+    }
+
+    private fun NutritionCore.toSearchSections(query: String): FoodSearchSections {
+        val normalized = query.trim().lowercase()
+        fun String?.matchesQuery(): Boolean = normalized.isBlank() || this.orEmpty().lowercase().contains(normalized)
+        fun FoodLogEntry.matches() = name.matchesQuery() || brand.matchesQuery()
+        fun FoodFavoritePreset.matches() = name.matchesQuery() || brand.matchesQuery()
+        fun CustomFood.matches() = name.matchesQuery() || brand.matchesQuery()
+        val recent = foodHistory
+            .filter { it.matches() }
+            .distinctBy { it.name.lowercase() to it.brand.orEmpty().lowercase() }
+            .take(8)
+        return FoodSearchSections(
+            query = query,
+            recent = recent,
+            favorites = foodFavorites.filter { it.matches() }.take(8),
+            customFoods = customFoods.filter { it.matches() }.take(8),
+            searchResults = if (normalized.isBlank()) {
+                emptyList()
+            } else {
+                foodHistory.filter { it.matches() && it !in recent }.take(20)
+            }
+        )
+    }
+
+    private fun List<FoodLogEntry>.previousDayEntries(): List<FoodLogEntry> {
+        val zone = ZoneId.systemDefault()
+        val yesterday = LocalDate.now(zone).minusDays(1)
+        return filter { Instant.ofEpochMilli(it.consumedAt).atZone(zone).toLocalDate() == yesterday }
+    }
+
+    private fun List<FoodLogEntry>.previousMealEntries(mealType: MealType): List<FoodLogEntry> {
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        val grouped = filter { entry ->
+            entry.mealType == mealType && Instant.ofEpochMilli(entry.consumedAt).atZone(zone).toLocalDate() < today
+        }.groupBy { Instant.ofEpochMilli(it.consumedAt).atZone(zone).toLocalDate() }
+        val latestDay = grouped.keys.maxOrNull() ?: return emptyList()
+        return grouped[latestDay].orEmpty()
     }
 
     private fun AppError.toFavoriteMessage(fallback: String): String {

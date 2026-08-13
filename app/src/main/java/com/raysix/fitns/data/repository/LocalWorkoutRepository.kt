@@ -9,11 +9,13 @@ import com.raysix.fitns.data.local.entity.ExerciseEntity
 import com.raysix.fitns.data.local.entity.SyncStatus
 import com.raysix.fitns.data.local.entity.WorkoutExerciseEntity
 import com.raysix.fitns.data.local.entity.WorkoutSetEntity
+import com.raysix.fitns.domain.model.ActiveWorkoutSession
 import com.raysix.fitns.domain.model.Exercise
 import com.raysix.fitns.domain.model.WorkoutLogEntry
 import com.raysix.fitns.domain.model.WorkoutPlan
 import com.raysix.fitns.domain.model.WorkoutPlanExercise
 import com.raysix.fitns.domain.model.WorkoutSetInput
+import com.raysix.fitns.domain.model.WorkoutSetType
 import com.raysix.fitns.domain.repository.WorkoutRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -146,6 +148,53 @@ class LocalWorkoutRepository @Inject constructor(
         return AppResult.Success(Unit)
     }
 
+    override suspend fun saveWorkoutSession(session: ActiveWorkoutSession): AppResult<Unit> {
+        val completedExercises = session.exercises.mapNotNull { activeExercise ->
+            val completedSets = activeExercise.sets.filter { it.completedAt != null }
+            if (completedSets.isEmpty()) null else activeExercise to completedSets
+        }
+        if (completedExercises.isEmpty()) {
+            return AppResult.Failure(AppError.Validation("Complete at least one set before finishing."))
+        }
+        val invalidSet = completedExercises
+            .flatMap { it.second }
+            .map {
+                WorkoutSetInput(
+                    weightKg = it.weightKg,
+                    repetitions = it.repetitions,
+                    rpe = it.rpe,
+                    rir = it.rir,
+                    setType = it.setType,
+                    completedAt = it.completedAt,
+                    restSeconds = it.restSeconds
+                )
+            }
+            .firstNotNullOfOrNull { validate(it) }
+        if (invalidSet != null) return AppResult.Failure(invalidSet)
+
+        val finishedAt = System.currentTimeMillis()
+        val workoutExercises = completedExercises.map { (exercise, _) ->
+            exercise.toWorkoutExerciseEntity(workoutId = session.id, now = finishedAt)
+        }
+        val sets = completedExercises.flatMap { (exercise, completedSets) ->
+            completedSets.map { set -> set.toEntity(exercise.id, finishedAt) }
+        }
+
+        workoutDao.addWorkoutSession(
+            exercises = completedExercises.map { it.first.exercise.toEntity(finishedAt) },
+            workout = newWorkoutEntity(id = session.id, now = session.startedAt, endedAt = finishedAt),
+            workoutExercises = workoutExercises,
+            sets = sets
+        )
+        syncQueueWriter.enqueue(
+            entityType = EntityTypeWorkout,
+            entityId = session.id,
+            operation = OperationUpsert,
+            payloadJson = syncPayloadFactory.workoutSession(session, OperationUpsert)
+        )
+        return AppResult.Success(Unit)
+    }
+
     override suspend fun saveWorkoutPlan(plan: WorkoutPlan): AppResult<Unit> {
         val error = validate(plan)
         if (error != null) return AppResult.Failure(error)
@@ -191,6 +240,8 @@ class LocalWorkoutRepository @Inject constructor(
             set.repetitions < 0 -> AppError.Validation("Reps cannot be negative.")
             set.sets < 1 -> AppError.Validation("Set count must be at least one.")
             set.rpe != null && set.rpe !in 1..10 -> AppError.Validation("RPE must be between 1 and 10.")
+            set.rir != null && set.rir !in 0..10 -> AppError.Validation("RIR must be between 0 and 10.")
+            set.restSeconds < 0 -> AppError.Validation("Rest time cannot be negative.")
             else -> null
         }
     }
@@ -220,8 +271,12 @@ class LocalWorkoutRepository @Inject constructor(
             weightKg = weightKg,
             repetitions = repetitions,
             rpe = rpe,
+            rir = rir,
             sets = setCount,
-            isPerSide = isPerSide
+            isPerSide = isPerSide,
+            setType = runCatching { WorkoutSetType.valueOf(setType) }.getOrDefault(if (isWarmup) WorkoutSetType.WarmUp else WorkoutSetType.Normal),
+            completedAt = completedAt,
+            restSeconds = restSeconds
         )
     }
 

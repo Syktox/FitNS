@@ -26,6 +26,8 @@ import com.raysix.fitns.data.local.entity.NutrientEntity
 import com.raysix.fitns.data.local.entity.NutrientTargetEntity
 import com.raysix.fitns.data.local.entity.NutritionGoalEntity
 import com.raysix.fitns.data.local.entity.RecommendationEntity
+import com.raysix.fitns.data.local.entity.SavedMealEntity
+import com.raysix.fitns.data.local.entity.SavedMealItemEntity
 import com.raysix.fitns.data.local.entity.SyncQueueItemEntity
 import com.raysix.fitns.data.local.entity.SyncStatus
 import com.raysix.fitns.data.local.entity.UserProfileEntity
@@ -44,6 +46,8 @@ import com.raysix.fitns.domain.model.Micronutrients
         FoodServingEntity::class,
         FoodEntryEntity::class,
         MealEntity::class,
+        SavedMealEntity::class,
+        SavedMealItemEntity::class,
         NutrientEntity::class,
         FoodNutrientEntity::class,
         NutrientTargetEntity::class,
@@ -62,7 +66,7 @@ import com.raysix.fitns.domain.model.Micronutrients
         ImageAnalysisResultEntity::class,
         BarcodeScanResultEntity::class
     ],
-    version = 3,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(FitNsTypeConverters::class)
@@ -87,4 +91,3 @@ class FitNsTypeConverters {
     @TypeConverter
     fun stringToMicronutrients(value: String?): Micronutrients = MicronutrientsCodec.decode(value)
 }
-

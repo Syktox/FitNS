@@ -36,6 +36,8 @@ data class SettingsUiState(
     val pendingSyncCount: Int = 0,
     val connectionStatus: String = "Not tested",
     val testingConnection: Boolean = false,
+    val bearerTokenInput: String = "",
+    val bearerTokenConfigured: Boolean = false,
     val exportStatus: String? = null,
     val exportPreview: String? = null
 )
@@ -54,11 +56,13 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     private val connectionStatus = MutableStateFlow("Not tested")
     private val testingConnection = MutableStateFlow(false)
+    private val bearerTokenInput = MutableStateFlow("")
+    private val bearerTokenConfigured = MutableStateFlow(false)
     private val exportStatus = MutableStateFlow<String?>(null)
     private val exportPreview = MutableStateFlow<String?>(null)
     private val exportAdapter = moshi.adapter(LocalDataExport::class.java).indent("  ")
-    private val connectionState = combine(connectionStatus, testingConnection) { status, testing ->
-        status to testing
+    private val connectionState = combine(connectionStatus, testingConnection, bearerTokenInput, bearerTokenConfigured) { status, testing, tokenInput, tokenConfigured ->
+        ConnectionState(status = status, testing = testing, tokenInput = tokenInput, tokenConfigured = tokenConfigured)
     }
     private val exportState = combine(exportStatus, exportPreview) { status, preview ->
         status to preview
@@ -75,8 +79,10 @@ class SettingsViewModel @Inject constructor(
             n8nSettings = n8nSettings,
             temporaryPhotosOnly = temporaryPhotosOnly,
             pendingSyncCount = pendingSyncCount,
-            connectionStatus = connection.first,
-            testingConnection = connection.second,
+            connectionStatus = connection.status,
+            testingConnection = connection.testing,
+            bearerTokenInput = connection.tokenInput,
+            bearerTokenConfigured = connection.tokenConfigured,
             exportStatus = export.first,
             exportPreview = export.second
         )
@@ -85,6 +91,12 @@ class SettingsViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = SettingsUiState()
     )
+
+    init {
+        viewModelScope.launch {
+            bearerTokenConfigured.value = !settingsRepository.readBearerToken().isNullOrBlank()
+        }
+    }
 
     fun updateN8nBaseUrl(baseUrl: String) {
         viewModelScope.launch {
@@ -96,6 +108,26 @@ class SettingsViewModel @Inject constructor(
     fun updateSyncEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.updateSyncEnabled(enabled)
+        }
+    }
+
+    fun updateBearerToken(token: String) {
+        bearerTokenInput.value = token
+    }
+
+    fun saveBearerToken() {
+        viewModelScope.launch {
+            val token = bearerTokenInput.value.trim()
+            if (token.isBlank()) {
+                settingsRepository.clearBearerToken()
+                bearerTokenConfigured.value = false
+                connectionStatus.value = "Bearer token cleared"
+            } else {
+                settingsRepository.setBearerToken(token)
+                bearerTokenConfigured.value = true
+                bearerTokenInput.value = ""
+                connectionStatus.value = "Bearer token saved securely"
+            }
         }
     }
 
@@ -111,7 +143,7 @@ class SettingsViewModel @Inject constructor(
             connectionStatus.value = "Testing connection..."
             val result = n8nRepository.testConnection(
                 baseUrl = uiState.value.n8nSettings.baseUrl,
-                bearerToken = null
+                bearerToken = settingsRepository.readBearerToken()
             )
             connectionStatus.value = when (result) {
                 is AppResult.Success -> "Connection successful"
@@ -153,6 +185,13 @@ class SettingsViewModel @Inject constructor(
         }
     }
 }
+
+private data class ConnectionState(
+    val status: String,
+    val testing: Boolean,
+    val tokenInput: String,
+    val tokenConfigured: Boolean
+)
 
 data class LocalDataExport(
     val generatedAt: Long,

@@ -4,6 +4,7 @@
 build/
 local.properties
 .env.android-signing
+.env
 *.iml
 *.apk
 *.aab

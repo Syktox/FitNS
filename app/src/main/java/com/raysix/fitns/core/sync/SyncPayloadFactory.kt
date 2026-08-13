@@ -1,8 +1,10 @@
 package com.raysix.fitns.core.sync
 
 import com.squareup.moshi.Moshi
+import com.raysix.fitns.domain.model.ActiveWorkoutSession
 import com.raysix.fitns.domain.model.BodyWeightLogEntry
 import com.raysix.fitns.domain.model.FoodLogEntry
+import com.raysix.fitns.domain.model.UserProfile
 import com.raysix.fitns.domain.model.WorkoutLogEntry
 import javax.inject.Inject
 
@@ -11,7 +13,9 @@ class SyncPayloadFactory @Inject constructor(
 ) {
     private val foodAdapter = moshi.adapter(FoodEntrySyncPayload::class.java)
     private val workoutAdapter = moshi.adapter(WorkoutSyncPayload::class.java)
+    private val workoutSessionAdapter = moshi.adapter(WorkoutSessionSyncPayload::class.java)
     private val bodyWeightAdapter = moshi.adapter(BodyWeightSyncPayload::class.java)
+    private val profileAdapter = moshi.adapter(UserProfileSyncPayload::class.java)
 
     fun foodEntry(entry: FoodLogEntry, operation: String): String {
         return foodAdapter.toJson(
@@ -33,12 +37,32 @@ class SyncPayloadFactory @Inject constructor(
         )
     }
 
+    fun workoutSession(session: ActiveWorkoutSession, operation: String): String {
+        return workoutSessionAdapter.toJson(
+            WorkoutSessionSyncPayload(
+                operation = operation,
+                generatedAt = System.currentTimeMillis(),
+                session = session
+            )
+        )
+    }
+
     fun bodyWeight(entry: BodyWeightLogEntry, operation: String): String {
         return bodyWeightAdapter.toJson(
             BodyWeightSyncPayload(
                 operation = operation,
                 generatedAt = System.currentTimeMillis(),
                 bodyWeightEntry = entry
+            )
+        )
+    }
+
+    fun profile(profile: UserProfile, operation: String): String {
+        return profileAdapter.toJson(
+            UserProfileSyncPayload(
+                operation = operation,
+                generatedAt = System.currentTimeMillis(),
+                profile = profile
             )
         )
     }
@@ -58,6 +82,13 @@ data class WorkoutSyncPayload(
     val workout: WorkoutLogEntry
 )
 
+data class WorkoutSessionSyncPayload(
+    val entityType: String = "WorkoutSession",
+    val operation: String,
+    val generatedAt: Long,
+    val session: ActiveWorkoutSession
+)
+
 data class BodyWeightSyncPayload(
     val entityType: String = "BodyWeight",
     val operation: String,
@@ -65,3 +96,9 @@ data class BodyWeightSyncPayload(
     val bodyWeightEntry: BodyWeightLogEntry
 )
 
+data class UserProfileSyncPayload(
+    val entityType: String = "UserProfile",
+    val operation: String,
+    val generatedAt: Long,
+    val profile: UserProfile
+)

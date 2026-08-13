@@ -11,6 +11,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -27,6 +29,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
 import com.raysix.fitns.core.design.AdaptiveTwoColumn
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
@@ -79,7 +83,15 @@ fun ProfileScreen(
         header = {
             ScreenHeader(
                 title = "Profile",
-                subtitle = "Set goals that drive nutrition targets and progress tracking."
+                subtitle = "Set goals that drive nutrition targets and progress tracking.",
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = "Settings"
+                        )
+                    }
+                }
             )
         },
         main = {

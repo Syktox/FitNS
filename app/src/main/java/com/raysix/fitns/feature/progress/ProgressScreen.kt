@@ -40,18 +40,21 @@ fun ProgressScreen(uiState: ProgressUiState) {
         },
         main = {
             ProgressSummaryCard(uiState.summary)
+            BodyWeightAnalyticsCard(uiState.bodyWeightAnalytics)
             TrendCard(
                 title = "Calories",
                 valueLabel = "kcal",
                 points = uiState.calories,
                 emptyMessage = "Log meals for several days to see calorie trends."
             )
+            NutritionAnalyticsCard(uiState.nutritionAnalytics)
             TrendCard(
                 title = "Workout Volume",
                 valueLabel = "kg",
                 points = uiState.workoutVolume,
                 emptyMessage = "Log workouts to see weekly volume patterns."
             )
+            MuscleGroupVolumeCard(uiState.muscleGroupVolume)
         },
         side = {
             TrendCard(
@@ -60,6 +63,13 @@ fun ProgressScreen(uiState: ProgressUiState) {
                 points = uiState.bodyWeight,
                 emptyMessage = "Log body weight entries to see your trend."
             )
+            TrendCard(
+                title = "7-Day Weight Average",
+                valueLabel = "kg",
+                points = uiState.bodyWeightMovingAverage,
+                emptyMessage = "Log at least a few body-weight entries to see a moving average."
+            )
+            StrengthProgressCard(uiState.strengthProgress)
         }
     )
 }
@@ -97,6 +107,97 @@ private fun HeroMetric(label: String, value: String, onPrimary: Color, modifier:
             fontWeight = FontWeight.Bold,
             color = onPrimary
         )
+    }
+}
+
+@Composable
+private fun BodyWeightAnalyticsCard(analytics: BodyWeightAnalytics) {
+    SectionCard(title = "Body Weight Analytics") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AnalyticsRow("Raw weight", analytics.latestWeightKg?.let { "${it.formatOne()} kg" } ?: "-")
+            AnalyticsRow("7-day average", analytics.sevenDayAverageKg?.let { "${it.formatOne()} kg" } ?: "-")
+            AnalyticsRow("30-day change", analytics.thirtyDayChangeKg?.signedKg() ?: "-")
+            AnalyticsRow("Distance to target", analytics.distanceToTargetKg?.signedKg() ?: "-")
+            AnalyticsRow("Weekly rate", analytics.estimatedWeeklyRateKg?.signedKg() ?: "-")
+        }
+    }
+}
+
+@Composable
+private fun NutritionAnalyticsCard(windows: List<NutritionAnalyticsWindow>) {
+    SectionCard(title = "Nutrition Analytics") {
+        if (windows.isEmpty()) {
+            Text("Log meals to see nutrition averages.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        windows.forEach { window ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("${window.days} days", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "${window.averageCalories.roundToInt()} kcal | P ${window.averageProtein.roundToInt()} g | C ${window.averageCarbs.roundToInt()} g | F ${window.averageFat.roundToInt()} g | Fiber ${window.averageFiber.roundToInt()} g",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "Goal adherence ${window.goalAdherencePercent.roundToInt()}%",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MuscleGroupVolumeCard(groups: List<MuscleGroupVolumeAnalytics>) {
+    SectionCard(title = "Training Volume", subtitle = "Current week vs previous week") {
+        if (groups.isEmpty()) {
+            Text("Log workouts to compare weekly volume by muscle group.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        groups.forEach { group ->
+            AnalyticsRow(
+                label = group.muscleGroup,
+                value = "${group.weeklySets} sets | ${group.weeklyVolumeKg.roundToInt()} kg | ${group.changePercent?.let { "${it.roundToInt()}%" } ?: "new"}"
+            )
+        }
+    }
+}
+
+@Composable
+private fun StrengthProgressCard(exercises: List<StrengthExerciseAnalytics>) {
+    SectionCard(title = "Strength Progress") {
+        if (exercises.isEmpty()) {
+            Text("Log sets to see exercise-level strength progress.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        exercises.forEach { exercise ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(exercise.exerciseName, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Est. 1RM ${exercise.estimatedOneRepMax.lastOrNull()?.value?.roundToInt() ?: 0} kg | Max ${exercise.maxWeightKg.roundToInt()} kg | Best ${exercise.bestReps} reps",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "Volume ${exercise.volumeKg.roundToInt()} kg | ${exercise.workoutFrequency} sessions",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (exercise.estimatedOneRepMax.size > 1) {
+                    TrendLine(points = exercise.estimatedOneRepMax, lineColor = MaterialTheme.colorScheme.tertiary)
+                }
+                if (exercise.recentSessions.isNotEmpty()) {
+                    Text(
+                        "Recent: ${exercise.recentSessions.joinToString()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnalyticsRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontWeight = FontWeight.Medium)
+        Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -180,4 +281,9 @@ private fun TrendLine(points: List<TrendPoint>, lineColor: Color) {
 
 private fun Double.formatOne(): String {
     return "${(this * 10.0).roundToInt() / 10.0}"
+}
+
+private fun Double.signedKg(): String {
+    val value = formatOne()
+    return if (this > 0.0) "+$value kg" else "$value kg"
 }

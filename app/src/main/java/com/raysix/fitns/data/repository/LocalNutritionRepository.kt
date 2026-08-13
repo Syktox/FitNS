@@ -9,13 +9,20 @@ import com.raysix.fitns.data.local.entity.DailyNutritionSummaryEntity
 import com.raysix.fitns.data.local.entity.FoodNutrientEntity
 import com.raysix.fitns.data.local.entity.FoodProductEntity
 import com.raysix.fitns.data.local.entity.FoodServingEntity
+import com.raysix.fitns.data.local.entity.SavedMealEntity
+import com.raysix.fitns.data.local.entity.SavedMealItemEntity
 import com.raysix.fitns.data.local.entity.SyncStatus
+import com.raysix.fitns.domain.model.CustomFood
 import com.raysix.fitns.domain.model.DailyNutritionDashboard
 import com.raysix.fitns.domain.model.FoodFavoritePreset
 import com.raysix.fitns.domain.model.FoodLogEntry
+import com.raysix.fitns.domain.model.MealType
 import com.raysix.fitns.domain.model.NutritionFacts
+import com.raysix.fitns.domain.model.SavedMeal
+import com.raysix.fitns.domain.model.SavedMealItem
 import com.raysix.fitns.domain.repository.NutritionRepository
 import com.raysix.fitns.domain.repository.ProfileRepository
+import com.raysix.fitns.domain.usecase.MealScaler
 import com.raysix.fitns.domain.usecase.NutritionCalculator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -31,7 +38,8 @@ class LocalNutritionRepository @Inject constructor(
     private val nutritionCalculator: NutritionCalculator,
     private val syncQueueWriter: SyncQueueWriter,
     private val syncPayloadFactory: SyncPayloadFactory,
-    private val profileRepository: ProfileRepository
+    private val profileRepository: ProfileRepository,
+    private val mealScaler: MealScaler
 ) : NutritionRepository {
     override fun observeToday(): Flow<DailyNutritionDashboard> {
         val zone = ZoneId.systemDefault()
@@ -66,6 +74,37 @@ class LocalNutritionRepository @Inject constructor(
             products.mapNotNull { product ->
                 val productNutrients = nutrients.filter { it.foodProductId == product.id }
                 product.toFavoritePreset(productNutrients)
+            }
+        }
+    }
+
+    override fun observeCustomFoods(): Flow<List<CustomFood>> {
+        return combine(
+            foodDao.observeCustomProducts(),
+            foodDao.observeCustomNutrients()
+        ) { products, nutrients ->
+            products.mapNotNull { product ->
+                val productNutrients = nutrients.filter { it.foodProductId == product.id }
+                product.toCustomFood(productNutrients)
+            }
+        }
+    }
+
+    override fun observeSavedMeals(): Flow<List<SavedMeal>> {
+        return combine(
+            foodDao.observeSavedMeals(),
+            foodDao.observeSavedMealItems()
+        ) { meals, items ->
+            meals.map { meal ->
+                SavedMeal(
+                    id = meal.id,
+                    name = meal.name,
+                    createdAt = meal.createdAt,
+                    items = items
+                        .filter { it.savedMealId == meal.id }
+                        .sortedBy { it.sortOrder }
+                        .map { SavedMealItem(id = it.id, food = it.toFoodLogEntry()) }
+                )
             }
         }
     }
@@ -116,6 +155,8 @@ class LocalNutritionRepository @Inject constructor(
                 servingSizeGrams = entry.grams,
                 notes = entry.notes,
                 isFavorite = true,
+                isCustom = false,
+                micronutrientsJson = null,
                 createdAt = now,
                 updatedAt = now,
                 deletedAt = null,
@@ -137,6 +178,110 @@ class LocalNutritionRepository @Inject constructor(
                 serverVersion = null
             )
         )
+        return AppResult.Success(Unit)
+    }
+
+    override suspend fun saveCustomFood(entry: FoodLogEntry): AppResult<Unit> {
+        val error = validate(entry)
+        if (error != null) return AppResult.Failure(error)
+        if (entry.name.isBlank()) return AppResult.Failure(AppError.Validation("Food name is required."))
+        if (entry.grams <= 0.0) return AppResult.Failure(AppError.Validation("Serving size must be greater than zero."))
+
+        val now = System.currentTimeMillis()
+        val productId = entry.customFoodId()
+        foodDao.upsertFoodProduct(
+            FoodProductEntity(
+                id = productId,
+                barcode = null,
+                name = entry.name,
+                brand = entry.brand,
+                servingSizeGrams = entry.grams,
+                notes = entry.notes,
+                isFavorite = false,
+                isCustom = true,
+                micronutrientsJson = com.raysix.fitns.core.serialization.MicronutrientsCodec.encode(entry.micronutrients),
+                createdAt = now,
+                updatedAt = now,
+                deletedAt = null,
+                syncStatus = SyncStatus.PendingSync,
+                serverVersion = null
+            )
+        )
+        foodDao.upsertFoodNutrients(entry.toFavoriteNutrients(productId, now))
+        foodDao.upsertFoodServing(
+            FoodServingEntity(
+                id = "$productId-serving-default",
+                foodProductId = productId,
+                label = "Default serving",
+                grams = entry.grams,
+                createdAt = now,
+                updatedAt = now,
+                deletedAt = null,
+                syncStatus = SyncStatus.PendingSync,
+                serverVersion = null
+            )
+        )
+        return AppResult.Success(Unit)
+    }
+
+    override suspend fun deleteCustomFood(customFood: CustomFood): AppResult<Unit> {
+        foodDao.softDeleteFoodProduct(customFood.id, System.currentTimeMillis())
+        return AppResult.Success(Unit)
+    }
+
+    override suspend fun saveMeal(meal: SavedMeal): AppResult<Unit> {
+        if (meal.name.isBlank()) return AppResult.Failure(AppError.Validation("Meal name is required."))
+        if (meal.items.isEmpty()) return AppResult.Failure(AppError.Validation("Save at least one food in a meal."))
+        val now = System.currentTimeMillis()
+        foodDao.upsertSavedMealWithItems(
+            meal = SavedMealEntity(
+                id = meal.id,
+                name = meal.name.trim(),
+                createdAt = meal.createdAt,
+                updatedAt = now,
+                deletedAt = null,
+                syncStatus = SyncStatus.PendingSync,
+                serverVersion = null
+            ),
+            items = meal.items.mapIndexed { index, item ->
+                item.toEntity(savedMealId = meal.id, sortOrder = index, now = now)
+            }
+        )
+        return AppResult.Success(Unit)
+    }
+
+    override suspend fun deleteSavedMeal(meal: SavedMeal): AppResult<Unit> {
+        foodDao.softDeleteSavedMealCascade(meal.id, System.currentTimeMillis())
+        return AppResult.Success(Unit)
+    }
+
+    override suspend fun logSavedMeal(meal: SavedMeal, scaleFactor: Double, mealType: MealType): AppResult<Unit> {
+        return copyEntries(
+            entries = mealScaler.scale(meal.items.map { it.food }, scaleFactor)
+                .map { it.copy(mealType = mealType) },
+            mealType = null
+        )
+    }
+
+    override suspend fun copyEntries(entries: List<FoodLogEntry>, mealType: MealType?): AppResult<Unit> {
+        if (entries.isEmpty()) return AppResult.Failure(AppError.Validation("No foods are available to copy."))
+        val now = System.currentTimeMillis()
+        entries.forEach { entry ->
+            val copied = entry.copy(
+                id = UUID.randomUUID().toString(),
+                mealType = mealType ?: entry.mealType,
+                consumedAt = now
+            )
+            val error = validate(copied)
+            if (error != null) return AppResult.Failure(error)
+            foodDao.upsertFoodEntry(copied.toEntity(now))
+            syncQueueWriter.enqueue(
+                entityType = EntityTypeFoodEntry,
+                entityId = copied.id,
+                operation = OperationUpsert,
+                payloadJson = syncPayloadFactory.foodEntry(copied, OperationUpsert)
+            )
+        }
         return AppResult.Success(Unit)
     }
 
@@ -227,6 +372,29 @@ class LocalNutritionRepository @Inject constructor(
         )
     }
 
+    private fun FoodProductEntity.toCustomFood(nutrients: List<FoodNutrientEntity>): CustomFood? {
+        if (name.isBlank()) return null
+        return CustomFood(
+            id = id,
+            name = name,
+            brand = brand,
+            servingSizeGrams = servingSizeGrams ?: 100.0,
+            notes = notes,
+            micronutrients = com.raysix.fitns.core.serialization.MicronutrientsCodec.decode(micronutrientsJson),
+            nutritionPer100g = NutritionFacts(
+                caloriesKcal = nutrients.amountFor(NutrientCalories),
+                proteinGrams = nutrients.amountFor(NutrientProtein),
+                carbohydratesGrams = nutrients.amountFor(NutrientCarbs),
+                sugarGrams = nutrients.amountFor(NutrientSugar),
+                fatGrams = nutrients.amountFor(NutrientFat),
+                saturatedFatGrams = nutrients.amountFor(NutrientSaturatedFat),
+                fiberGrams = nutrients.amountFor(NutrientFiber),
+                saltGrams = nutrients.amountFor(NutrientSalt),
+                sodiumMilligrams = nutrients.amountFor(NutrientSodium).takeIf { it > 0.0 }
+            )
+        )
+    }
+
     private fun List<FoodNutrientEntity>.amountFor(nutrientId: String): Double {
         return firstOrNull { it.nutrientId == nutrientId }?.amountPer100g ?: 0.0
     }
@@ -259,6 +427,68 @@ class LocalNutritionRepository @Inject constructor(
         val normalized = "${name.trim().lowercase()}|${brand.orEmpty().trim().lowercase()}"
         val uuid = UUID.nameUUIDFromBytes(normalized.toByteArray(StandardCharsets.UTF_8))
         return "favorite-$uuid"
+    }
+
+    private fun FoodLogEntry.customFoodId(): String {
+        val normalized = "custom|${name.trim().lowercase()}|${brand.orEmpty().trim().lowercase()}"
+        val uuid = UUID.nameUUIDFromBytes(normalized.toByteArray(StandardCharsets.UTF_8))
+        return "custom-$uuid"
+    }
+
+    private fun SavedMealItem.toEntity(savedMealId: String, sortOrder: Int, now: Long): SavedMealItemEntity {
+        return SavedMealItemEntity(
+            id = id,
+            savedMealId = savedMealId,
+            foodEntrySnapshotId = food.id,
+            name = food.name,
+            brand = food.brand,
+            mealType = food.mealType.name,
+            grams = food.grams,
+            caloriesKcal = food.nutrition.caloriesKcal,
+            proteinGrams = food.nutrition.proteinGrams,
+            carbohydratesGrams = food.nutrition.carbohydratesGrams,
+            sugarGrams = food.nutrition.sugarGrams,
+            fatGrams = food.nutrition.fatGrams,
+            saturatedFatGrams = food.nutrition.saturatedFatGrams,
+            fiberGrams = food.nutrition.fiberGrams,
+            saltGrams = food.nutrition.saltGrams,
+            sodiumMilligrams = food.nutrition.sodiumMilligrams,
+            micronutrientsJson = com.raysix.fitns.core.serialization.MicronutrientsCodec.encode(food.micronutrients),
+            notes = food.notes,
+            dataQuality = food.dataQuality.name,
+            sortOrder = sortOrder,
+            createdAt = now,
+            updatedAt = now,
+            deletedAt = null,
+            syncStatus = SyncStatus.PendingSync,
+            serverVersion = null
+        )
+    }
+
+    private fun SavedMealItemEntity.toFoodLogEntry(): FoodLogEntry {
+        return FoodLogEntry(
+            id = foodEntrySnapshotId,
+            name = name,
+            brand = brand,
+            mealType = MealType.entries.firstOrNull { it.name == mealType } ?: MealType.Custom,
+            grams = grams,
+            nutrition = NutritionFacts(
+                caloriesKcal = caloriesKcal,
+                proteinGrams = proteinGrams,
+                carbohydratesGrams = carbohydratesGrams,
+                sugarGrams = sugarGrams,
+                fatGrams = fatGrams,
+                saturatedFatGrams = saturatedFatGrams,
+                fiberGrams = fiberGrams,
+                saltGrams = saltGrams,
+                sodiumMilligrams = sodiumMilligrams
+            ),
+            dataQuality = com.raysix.fitns.domain.model.DataQuality.entries.firstOrNull { it.name == dataQuality }
+                ?: com.raysix.fitns.domain.model.DataQuality.Missing,
+            notes = notes,
+            consumedAt = createdAt,
+            micronutrients = com.raysix.fitns.core.serialization.MicronutrientsCodec.decode(micronutrientsJson)
+        )
     }
 
     private companion object {

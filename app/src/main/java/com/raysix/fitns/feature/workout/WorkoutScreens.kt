@@ -68,7 +68,10 @@ fun WorkoutStartScreen(
     onAddExercise: (String, String, String, String) -> Unit,
     onAddWorkout: (Exercise, Double, Int, Int, Int?, String) -> Unit,
     onSavePlan: (String, String, List<Exercise>, Int, Int, Int, Int) -> Unit,
+    onUpdatePlan: (WorkoutPlan, String, String, List<Exercise>, Int, Int, Int, Int) -> Unit,
     onSaveTemplateAsPlan: (WorkoutTemplate) -> Unit,
+    onStartPlan: (WorkoutPlan) -> Unit,
+    onStartTemplate: (WorkoutTemplate) -> Unit,
     onDeletePlan: (WorkoutPlan) -> Unit,
     onShowHistory: () -> Unit
 ) {
@@ -89,9 +92,10 @@ fun WorkoutStartScreen(
     var activePlan by remember { mutableStateOf<WorkoutPlan?>(null) }
     var completedPlanExerciseIds by rememberSaveable(activePlan?.id) { mutableStateOf(emptySet<String>()) }
     var showPlanBuilder by rememberSaveable { mutableStateOf(false) }
+    var editingPlan by remember { mutableStateOf<WorkoutPlan?>(null) }
     var planName by rememberSaveable { mutableStateOf("My Workout Plan") }
     var planFocus by rememberSaveable { mutableStateOf("Strength and consistency") }
-    var selectedPlanExerciseIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var selectedPlanExerciseIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var planSets by rememberSaveable { mutableStateOf("3") }
     var planRepMin by rememberSaveable { mutableStateOf("8") }
     var planRepMax by rememberSaveable { mutableStateOf("12") }
@@ -128,16 +132,43 @@ fun WorkoutStartScreen(
         },
         main = {
             WeeklyTrainingCard(stats = uiState.weeklyStats)
+            if (uiState.personalRecords.isNotEmpty()) {
+                ModernCard(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                ) {
+                    Text("New PR", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    uiState.personalRecords.forEach { record ->
+                        Text("${record.exerciseName}: ${record.type.label} ${record.value.roundToInt()} ${record.unit}")
+                    }
+                }
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 SectionTitle("Saved Plans")
                 ActionPill(
                     text = if (showPlanBuilder) "Close" else "Create Plan",
                     filled = !showPlanBuilder,
-                    onClick = { showPlanBuilder = !showPlanBuilder }
+                    onClick = {
+                        if (showPlanBuilder) {
+                            showPlanBuilder = false
+                            editingPlan = null
+                        } else {
+                            planName = "My Workout Plan"
+                            planFocus = "Strength and consistency"
+                            selectedPlanExerciseIds = emptyList()
+                            planSets = "3"
+                            planRepMin = "8"
+                            planRepMax = "12"
+                            planRestSeconds = "90"
+                            editingPlan = null
+                            showPlanBuilder = true
+                        }
+                    }
                 )
             }
             if (showPlanBuilder) {
                 PlanBuilderCard(
+                    title = if (editingPlan == null) "Plan Builder" else "Edit Plan",
                     exercises = uiState.exercises,
                     planName = planName,
                     onPlanNameChange = { planName = it },
@@ -151,6 +182,16 @@ fun WorkoutStartScreen(
                             selectedPlanExerciseIds + exercise.id
                         }
                     },
+                    onMoveSelectedExercise = { exerciseId, direction ->
+                        val currentIndex = selectedPlanExerciseIds.indexOf(exerciseId)
+                        val targetIndex = (currentIndex + direction).coerceIn(0, selectedPlanExerciseIds.lastIndex)
+                        if (currentIndex >= 0 && currentIndex != targetIndex) {
+                            selectedPlanExerciseIds = selectedPlanExerciseIds.toMutableList().also { list ->
+                                val item = list.removeAt(currentIndex)
+                                list.add(targetIndex, item)
+                            }
+                        }
+                    },
                     targetSets = planSets,
                     onTargetSetsChange = { planSets = it },
                     targetRepMin = planRepMin,
@@ -160,17 +201,34 @@ fun WorkoutStartScreen(
                     restSeconds = planRestSeconds,
                     onRestSecondsChange = { planRestSeconds = it },
                     onSave = {
-                        val selectedExercises = uiState.exercises.filter { it.id in selectedPlanExerciseIds }
-                        onSavePlan(
-                            planName,
-                            planFocus,
-                            selectedExercises,
-                            planSets.toIntOrNull() ?: 3,
-                            planRepMin.toIntOrNull() ?: 8,
-                            planRepMax.toIntOrNull() ?: 12,
-                            planRestSeconds.toIntOrNull() ?: 90
-                        )
-                        selectedPlanExerciseIds = emptySet()
+                        val selectedExercises = selectedPlanExerciseIds.mapNotNull { exerciseId ->
+                            uiState.exercises.firstOrNull { it.id == exerciseId }
+                        }
+                        val planToEdit = editingPlan
+                        if (planToEdit == null) {
+                            onSavePlan(
+                                planName,
+                                planFocus,
+                                selectedExercises,
+                                planSets.toIntOrNull() ?: 3,
+                                planRepMin.toIntOrNull() ?: 8,
+                                planRepMax.toIntOrNull() ?: 12,
+                                planRestSeconds.toIntOrNull() ?: 90
+                            )
+                        } else {
+                            onUpdatePlan(
+                                planToEdit,
+                                planName,
+                                planFocus,
+                                selectedExercises,
+                                planSets.toIntOrNull() ?: 3,
+                                planRepMin.toIntOrNull() ?: 8,
+                                planRepMax.toIntOrNull() ?: 12,
+                                planRestSeconds.toIntOrNull() ?: 90
+                            )
+                        }
+                        selectedPlanExerciseIds = emptyList()
+                        editingPlan = null
                         showPlanBuilder = false
                     }
                 )
@@ -195,6 +253,19 @@ fun WorkoutStartScreen(
                                 sets = plan.exercises.first().targetSets.toString()
                                 restSeconds = plan.exercises.first().restSeconds
                             }
+                            onStartPlan(plan)
+                        },
+                        onEdit = {
+                            editingPlan = plan
+                            planName = plan.name
+                            planFocus = plan.focus
+                            selectedPlanExerciseIds = plan.exercises.map { it.exercise.id }
+                            val firstExercise = plan.exercises.firstOrNull()
+                            planSets = (firstExercise?.targetSets ?: 3).toString()
+                            planRepMin = (firstExercise?.targetRepMin ?: 8).toString()
+                            planRepMax = (firstExercise?.targetRepMax ?: 12).toString()
+                            planRestSeconds = (firstExercise?.restSeconds ?: 90).toString()
+                            showPlanBuilder = true
                         },
                         onDelete = { onDeletePlan(plan) }
                     )
@@ -237,7 +308,8 @@ fun WorkoutStartScreen(
                                     sets = (exercise.lastSets ?: 3).toString()
                                 }
                             },
-                            onSave = { onSaveTemplateAsPlan(template) }
+                            onSave = { onSaveTemplateAsPlan(template) },
+                            onStart = { onStartTemplate(template) }
                         )
                     }
                 }
@@ -430,13 +502,15 @@ private fun WeeklyTrainingCard(stats: WorkoutWeeklyStats) {
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun PlanBuilderCard(
+    title: String,
     exercises: List<Exercise>,
     planName: String,
     onPlanNameChange: (String) -> Unit,
     planFocus: String,
     onPlanFocusChange: (String) -> Unit,
-    selectedExerciseIds: Set<String>,
+    selectedExerciseIds: List<String>,
     onToggleExercise: (Exercise) -> Unit,
+    onMoveSelectedExercise: (String, Int) -> Unit,
     targetSets: String,
     onTargetSetsChange: (String) -> Unit,
     targetRepMin: String,
@@ -449,7 +523,7 @@ private fun PlanBuilderCard(
 ) {
     ModernCard(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
         Column(verticalArrangement = Arrangement.spacedBy(FitNsDimens.SectionSpacing)) {
-            Text("Plan Builder", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             OutlinedTextField(
                 value = planName,
                 onValueChange = onPlanNameChange,
@@ -471,6 +545,19 @@ private fun PlanBuilderCard(
                         onClick = { onToggleExercise(exercise) },
                         label = { Text(exercise.name) }
                     )
+                }
+            }
+            selectedExerciseIds.forEachIndexed { index, exerciseId ->
+                val exercise = exercises.firstOrNull { it.id == exerciseId } ?: return@forEachIndexed
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${index + 1}. ${exercise.name}", fontWeight = FontWeight.SemiBold)
+                        Text(exercise.muscleGroup, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        HeroPillSmall(text = "Up", filled = false, onClick = { onMoveSelectedExercise(exerciseId, -1) })
+                        HeroPillSmall(text = "Down", filled = false, onClick = { onMoveSelectedExercise(exerciseId, 1) })
+                    }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -495,6 +582,7 @@ private fun WorkoutPlanCard(
     plan: WorkoutPlan,
     selected: Boolean,
     onStart: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     ModernCard(
@@ -526,6 +614,7 @@ private fun WorkoutPlanCard(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionPill(text = if (selected) "Resume" else "Start", filled = true, onClick = onStart)
+                ActionPill(text = "Edit", filled = false, onClick = onEdit)
                 ActionPill(text = "Delete", filled = false, onClick = onDelete)
             }
         }
@@ -599,7 +688,8 @@ private fun WorkoutTemplateCard(
     template: WorkoutTemplate,
     selected: Boolean,
     onClick: () -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    onStart: () -> Unit
 ) {
     ModernCard(
         modifier = Modifier.width(260.dp),
@@ -627,6 +717,7 @@ private fun WorkoutTemplateCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionPill(text = "Preview", filled = false, onClick = onClick)
                 ActionPill(text = "Save", filled = true, onClick = onSave)
+                ActionPill(text = "Start", filled = true, onClick = onStart)
             }
         }
     }

@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.raysix.fitns.core.design.AdaptiveTwoColumn
@@ -28,6 +29,8 @@ import com.raysix.fitns.core.design.SectionCard
 fun SettingsScreen(
     uiState: SettingsUiState,
     onN8nBaseUrlChange: (String) -> Unit,
+    onBearerTokenChange: (String) -> Unit,
+    onSaveBearerToken: () -> Unit,
     onSyncEnabledChange: (Boolean) -> Unit,
     onTemporaryPhotosOnlyChange: (Boolean) -> Unit,
     onTestConnection: () -> Unit,
@@ -56,6 +59,30 @@ fun SettingsScreen(
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    OutlinedTextField(
+                        value = uiState.bearerTokenInput,
+                        onValueChange = onBearerTokenChange,
+                        label = { Text(if (uiState.bearerTokenConfigured) "Replace bearer token" else "Bearer token") },
+                        supportingText = { Text(if (uiState.bearerTokenConfigured) "A token is stored securely on this device." else "Required by the protected n8n webhooks.") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Surface(
+                        onClick = onSaveBearerToken,
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (uiState.bearerTokenConfigured) "Update token" else "Save token",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    }
                     Surface(
                         onClick = onTestConnection,
                         enabled = !uiState.testingConnection,

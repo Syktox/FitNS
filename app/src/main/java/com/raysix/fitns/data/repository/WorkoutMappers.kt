@@ -7,10 +7,13 @@ import com.raysix.fitns.data.local.entity.WorkoutExerciseEntity
 import com.raysix.fitns.data.local.entity.WorkoutPlanEntity
 import com.raysix.fitns.data.local.entity.WorkoutPlanExerciseEntity
 import com.raysix.fitns.data.local.entity.WorkoutSetEntity
+import com.raysix.fitns.domain.model.ActiveWorkoutExercise
+import com.raysix.fitns.domain.model.ActiveWorkoutSet
 import com.raysix.fitns.domain.model.Exercise
 import com.raysix.fitns.domain.model.WorkoutPlan
 import com.raysix.fitns.domain.model.WorkoutPlanExercise
 import com.raysix.fitns.domain.model.WorkoutSetInput
+import com.raysix.fitns.domain.model.WorkoutSetType
 import java.util.UUID
 
 fun ExerciseEntity.toDomain(
@@ -56,10 +59,13 @@ fun WorkoutSetInput.toEntity(workoutExerciseId: String, now: Long = System.curre
         weightKg = weightKg,
         repetitions = repetitions,
         setCount = sets,
-        isWarmup = false,
+        isWarmup = setType == WorkoutSetType.WarmUp,
         isPerSide = isPerSide,
+        setType = setType.name,
+        completedAt = completedAt,
+        restSeconds = restSeconds,
         rpe = rpe,
-        rir = null,
+        rir = rir,
         createdAt = now,
         updatedAt = now,
         deletedAt = null,
@@ -101,11 +107,33 @@ fun WorkoutPlanExercise.toEntity(planId: String, sortOrder: Int, now: Long = Sys
     )
 }
 
-fun newWorkoutEntity(id: String, now: Long): WorkoutEntity {
+fun ActiveWorkoutSet.toEntity(workoutExerciseId: String, now: Long = System.currentTimeMillis()): WorkoutSetEntity {
+    return WorkoutSetEntity(
+        id = id,
+        workoutExerciseId = workoutExerciseId,
+        weightKg = weightKg,
+        repetitions = repetitions,
+        setCount = setNumber,
+        isWarmup = setType == WorkoutSetType.WarmUp,
+        isPerSide = false,
+        setType = setType.name,
+        completedAt = completedAt,
+        restSeconds = restSeconds,
+        rpe = rpe,
+        rir = rir,
+        createdAt = now,
+        updatedAt = now,
+        deletedAt = null,
+        syncStatus = SyncStatus.PendingSync,
+        serverVersion = null
+    )
+}
+
+fun newWorkoutEntity(id: String, now: Long, endedAt: Long? = now): WorkoutEntity {
     return WorkoutEntity(
         id = id,
         startedAt = now,
-        endedAt = now,
+        endedAt = endedAt,
         durationMinutes = null,
         notes = "",
         createdAt = now,
@@ -116,12 +144,20 @@ fun newWorkoutEntity(id: String, now: Long): WorkoutEntity {
     )
 }
 
-fun newWorkoutExerciseEntity(id: String, workoutId: String, exerciseId: String, notes: String, now: Long): WorkoutExerciseEntity {
+fun newWorkoutExerciseEntity(
+    id: String,
+    workoutId: String,
+    exerciseId: String,
+    notes: String,
+    now: Long,
+    sortOrder: Int = 0
+): WorkoutExerciseEntity {
     return WorkoutExerciseEntity(
         id = id,
         workoutId = workoutId,
         exerciseId = exerciseId,
         machineId = null,
+        sortOrder = sortOrder,
         notes = notes,
         painOrDiscomfort = null,
         createdAt = now,
@@ -129,5 +165,16 @@ fun newWorkoutExerciseEntity(id: String, workoutId: String, exerciseId: String, 
         deletedAt = null,
         syncStatus = SyncStatus.PendingSync,
         serverVersion = null
+    )
+}
+
+fun ActiveWorkoutExercise.toWorkoutExerciseEntity(workoutId: String, now: Long = System.currentTimeMillis()): WorkoutExerciseEntity {
+    return newWorkoutExerciseEntity(
+        id = id,
+        workoutId = workoutId,
+        exerciseId = exercise.id,
+        notes = "",
+        now = now,
+        sortOrder = sortOrder
     )
 }

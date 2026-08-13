@@ -58,6 +58,42 @@ data class FoodFavoritePreset(
     val notes: String = ""
 )
 
+data class CustomFood(
+    val id: String,
+    val name: String,
+    val brand: String?,
+    val servingSizeGrams: Double,
+    val nutritionPer100g: NutritionFacts,
+    val notes: String = "",
+    val micronutrients: Micronutrients = Micronutrients()
+)
+
+data class SavedMealItem(
+    val id: String = UUID.randomUUID().toString(),
+    val food: FoodLogEntry
+)
+
+data class SavedMeal(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val items: List<SavedMealItem>,
+    val createdAt: Long = System.currentTimeMillis()
+) {
+    val caloriesKcal: Double
+        get() = items.sumOf { it.food.nutrition.caloriesKcal }
+
+    val proteinGrams: Double
+        get() = items.sumOf { it.food.nutrition.proteinGrams }
+}
+
+data class FoodSearchSections(
+    val query: String = "",
+    val recent: List<FoodLogEntry> = emptyList(),
+    val favorites: List<FoodFavoritePreset> = emptyList(),
+    val customFoods: List<CustomFood> = emptyList(),
+    val searchResults: List<FoodLogEntry> = emptyList()
+)
+
 data class NutritionGoal(
     val caloriesKcal: Double,
     val proteinGrams: Double,

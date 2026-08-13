@@ -15,6 +15,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -22,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,10 +43,13 @@ import com.raysix.fitns.core.design.SectionTitle
 import com.raysix.fitns.core.design.TagChip
 import com.raysix.fitns.domain.model.DataQuality
 import com.raysix.fitns.domain.model.DailyNutritionDashboard
+import com.raysix.fitns.domain.model.CustomFood
+import com.raysix.fitns.domain.model.FoodSearchSections
 import com.raysix.fitns.domain.model.FoodFavoritePreset
 import com.raysix.fitns.domain.model.FoodLogEntry
 import com.raysix.fitns.domain.model.MealType
 import com.raysix.fitns.domain.model.NutrientAggregate
+import com.raysix.fitns.domain.model.SavedMeal
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -53,17 +58,33 @@ fun NutritionDayScreen(
     dashboard: DailyNutritionDashboard,
     foodHistory: List<FoodLogEntry>,
     foodFavorites: List<FoodFavoritePreset>,
+    foodSearch: FoodSearchSections,
+    savedMeals: List<SavedMeal>,
     micronutrients: List<NutrientAggregate>,
     errorMessage: String?,
+    confirmationMessage: String?,
     onAddFood: () -> Unit,
+    onFoodSearchQueryChange: (String) -> Unit,
     onDuplicateFood: (FoodLogEntry) -> Unit,
     onDeleteFood: (FoodLogEntry) -> Unit,
     onUseFavorite: (FoodFavoritePreset) -> Unit,
     onSaveFavorite: (FoodLogEntry) -> Unit,
-    onDeleteFavorite: (FoodFavoritePreset) -> Unit
+    onDeleteFavorite: (FoodFavoritePreset) -> Unit,
+    onUseCustomFood: (CustomFood) -> Unit,
+    onSaveCustomFood: (FoodLogEntry) -> Unit,
+    onDeleteCustomFood: (CustomFood) -> Unit,
+    onSaveTodayAsMeal: (String) -> Unit,
+    onLogSavedMeal: (SavedMeal, Double, MealType) -> Unit,
+    onDeleteSavedMeal: (SavedMeal) -> Unit,
+    onCopyYesterday: () -> Unit,
+    onCopyPreviousMeal: (MealType) -> Unit
 ) {
     var pendingDelete by remember { mutableStateOf<FoodLogEntry?>(null) }
     var pendingFavoriteDelete by remember { mutableStateOf<FoodFavoritePreset?>(null) }
+    var pendingCustomDelete by remember { mutableStateOf<CustomFood?>(null) }
+    var pendingSavedMealDelete by remember { mutableStateOf<SavedMeal?>(null) }
+    var showSaveMealDialog by remember { mutableStateOf(false) }
+    var mealName by rememberSaveable { mutableStateOf("Saved Meal") }
     var selectedMeal by remember { mutableStateOf<MealType?>(null) }
     val visibleEntries = if (selectedMeal == null) {
         dashboard.entries
@@ -117,6 +138,83 @@ fun NutritionDayScreen(
         )
     }
 
+    pendingCustomDelete?.let { customFood ->
+        AlertDialog(
+            onDismissRequest = { pendingCustomDelete = null },
+            title = { Text("Delete Custom Food") },
+            text = { Text("Remove ${customFood.name} from your custom foods?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteCustomFood(customFood)
+                        pendingCustomDelete = null
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCustomDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    pendingSavedMealDelete?.let { meal ->
+        AlertDialog(
+            onDismissRequest = { pendingSavedMealDelete = null },
+            title = { Text("Delete Saved Meal") },
+            text = { Text("Remove ${meal.name} from saved meals?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteSavedMeal(meal)
+                        pendingSavedMealDelete = null
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingSavedMealDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showSaveMealDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveMealDialog = false },
+            title = { Text("Save Meal") },
+            text = {
+                OutlinedTextField(
+                    value = mealName,
+                    onValueChange = { mealName = it },
+                    label = { Text("Meal name") },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onSaveTodayAsMeal(mealName)
+                        showSaveMealDialog = false
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSaveMealDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     AdaptiveTwoColumn(
         header = {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -154,6 +252,14 @@ fun NutritionDayScreen(
             if (errorMessage != null) {
                 ErrorBanner(message = errorMessage)
             }
+            if (confirmationMessage != null) {
+                ModernCard(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                ) {
+                    Text(confirmationMessage, fontWeight = FontWeight.SemiBold)
+                }
+            }
             SectionTitle("Today")
             if (dashboard.entries.isEmpty()) {
                 EmptyStateCard(
@@ -166,12 +272,38 @@ fun NutritionDayScreen(
                     entry = entry,
                     onDuplicate = { onDuplicateFood(entry) },
                     onSaveFavorite = { onSaveFavorite(entry) },
+                    onSaveCustomFood = { onSaveCustomFood(entry) },
                     onDelete = { pendingDelete = entry }
                 )
             }
         },
         side = {
             MicronutrientsCard(micronutrients = micronutrients)
+            CopyPreviousMealsCard(
+                onCopyYesterday = onCopyYesterday,
+                onCopyPreviousMeal = onCopyPreviousMeal
+            )
+            if (dashboard.entries.isNotEmpty()) {
+                ActionPill(
+                    text = "Save Today as Meal",
+                    filled = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { showSaveMealDialog = true }
+                )
+            }
+            FoodSearchCard(
+                sections = foodSearch,
+                onQueryChange = onFoodSearchQueryChange,
+                onUseRecent = onDuplicateFood,
+                onUseFavorite = onUseFavorite,
+                onUseCustomFood = onUseCustomFood,
+                onDeleteCustomFood = { pendingCustomDelete = it }
+            )
+            SavedMealsCard(
+                meals = savedMeals,
+                onLogSavedMeal = onLogSavedMeal,
+                onDeleteSavedMeal = { pendingSavedMealDelete = it }
+            )
             if (foodFavorites.isNotEmpty()) {
                 SectionTitle("Favorites")
             }
@@ -364,6 +496,181 @@ private fun TargetLine(label: String, current: Double, target: Double, unit: Str
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CopyPreviousMealsCard(
+    onCopyYesterday: () -> Unit,
+    onCopyPreviousMeal: (MealType) -> Unit
+) {
+    SectionCard(title = "Copy Previous", subtitle = "Reuse meals you already logged") {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ActionPill(text = "Copy yesterday", filled = false, onClick = onCopyYesterday)
+            listOf(MealType.Breakfast, MealType.Lunch, MealType.Dinner).forEach { meal ->
+                ActionPill(text = "Previous ${meal.name}", filled = false, onClick = { onCopyPreviousMeal(meal) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun FoodSearchCard(
+    sections: FoodSearchSections,
+    onQueryChange: (String) -> Unit,
+    onUseRecent: (FoodLogEntry) -> Unit,
+    onUseFavorite: (FoodFavoritePreset) -> Unit,
+    onUseCustomFood: (CustomFood) -> Unit,
+    onDeleteCustomFood: (CustomFood) -> Unit
+) {
+    SectionCard(title = "Food Search", subtitle = "Recent, favorites, custom foods, and local matches") {
+        OutlinedTextField(
+            value = sections.query,
+            onValueChange = onQueryChange,
+            label = { Text("Search foods") },
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        )
+        SearchSection(title = "Recent", empty = "No recent matches.") {
+            sections.recent.forEach { entry ->
+                CompactFoodRow(
+                    name = entry.name,
+                    detail = "${entry.grams.roundToInt()} g | ${entry.nutrition.caloriesKcal.roundToInt()} kcal",
+                    onUse = { onUseRecent(entry) }
+                )
+            }
+        }
+        SearchSection(title = "Favorites", empty = "No favorite matches.") {
+            sections.favorites.forEach { favorite ->
+                CompactFoodRow(
+                    name = favorite.name,
+                    detail = "${favorite.servingSizeGrams.roundToInt()} g serving",
+                    onUse = { onUseFavorite(favorite) }
+                )
+            }
+        }
+        SearchSection(title = "Custom Foods", empty = "No custom foods yet.") {
+            sections.customFoods.forEach { custom ->
+                CompactFoodRow(
+                    name = custom.name,
+                    detail = "${custom.servingSizeGrams.roundToInt()} g serving",
+                    onUse = { onUseCustomFood(custom) },
+                    onDelete = { onDeleteCustomFood(custom) }
+                )
+            }
+        }
+        if (sections.query.isNotBlank()) {
+            SearchSection(title = "Search Results", empty = "No local matches.") {
+                sections.searchResults.forEach { entry ->
+                    CompactFoodRow(
+                        name = entry.name,
+                        detail = "${entry.grams.roundToInt()} g | ${entry.nutrition.caloriesKcal.roundToInt()} kcal",
+                        onUse = { onUseRecent(entry) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchSection(title: String, empty: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun CompactFoodRow(
+    name: String,
+    detail: String,
+    onUse: () -> Unit,
+    onDelete: (() -> Unit)? = null
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(name, fontWeight = FontWeight.SemiBold)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ActionPill(text = "Log", filled = true, onClick = onUse)
+            onDelete?.let {
+                ActionPill(text = "Delete", filled = false, danger = true, onClick = it)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SavedMealsCard(
+    meals: List<SavedMeal>,
+    onLogSavedMeal: (SavedMeal, Double, MealType) -> Unit,
+    onDeleteSavedMeal: (SavedMeal) -> Unit
+) {
+    SectionCard(title = "Saved Meals", subtitle = "Scale and log reusable meals") {
+        if (meals.isEmpty()) {
+            Text("Save today's foods as a meal to reuse them later.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        meals.forEach { meal ->
+            SavedMealRow(
+                meal = meal,
+                onLogSavedMeal = onLogSavedMeal,
+                onDeleteSavedMeal = onDeleteSavedMeal
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SavedMealRow(
+    meal: SavedMeal,
+    onLogSavedMeal: (SavedMeal, Double, MealType) -> Unit,
+    onDeleteSavedMeal: (SavedMeal) -> Unit
+) {
+    var scale by rememberSaveable(meal.id) { mutableStateOf("1.0") }
+    ModernCard(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) {
+                    Text(meal.name, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${meal.items.size} foods | ${meal.caloriesKcal.roundToInt()} kcal | ${meal.proteinGrams.roundToInt()} g protein",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                ActionPill(text = "Delete", filled = false, danger = true, onClick = { onDeleteSavedMeal(meal) })
+            }
+            OutlinedTextField(
+                value = scale,
+                onValueChange = { scale = it },
+                label = { Text("Scale") },
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(0.5, 1.0, 1.5, 2.0).forEach { factor ->
+                    FilterChip(
+                        selected = scale.toDoubleOrNull() == factor,
+                        onClick = { scale = factor.toString() },
+                        label = { Text("${factor}x") }
+                    )
+                }
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(MealType.Breakfast, MealType.Lunch, MealType.Dinner, MealType.Snack).forEach { mealType ->
+                    ActionPill(
+                        text = mealType.name,
+                        filled = mealType == MealType.Snack,
+                        onClick = { onLogSavedMeal(meal, scale.toDoubleOrNull() ?: 1.0, mealType) }
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun FavoriteCard(favorite: FoodFavoritePreset, onUse: () -> Unit, onDelete: () -> Unit) {
@@ -444,6 +751,7 @@ private fun FoodEntryCard(
     entry: FoodLogEntry,
     onDuplicate: () -> Unit,
     onSaveFavorite: () -> Unit,
+    onSaveCustomFood: () -> Unit,
     onDelete: () -> Unit
 ) {
     ModernCard {
@@ -481,6 +789,7 @@ private fun FoodEntryCard(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionPill(onClick = onDuplicate, text = "Duplicate", filled = false)
                 ActionPill(onClick = onSaveFavorite, text = "Favorite", filled = false)
+                ActionPill(onClick = onSaveCustomFood, text = "Custom Food", filled = false)
                 ActionPill(onClick = onDelete, text = "Delete", filled = false, danger = true)
             }
         }

@@ -91,4 +91,92 @@ class MigrationTest {
         helper.createDatabase(TEST_DB, 1).use { }
         helper.runMigrationsAndValidate(TEST_DB, 3, true, Migration1To2, Migration2To3)
     }
+
+    @Test
+    fun migrate3To4_addsWorkoutSessionMetadataDefaults() {
+        helper.createDatabase(TEST_DB, 3).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO workout_exercises (
+                    id, workoutId, exerciseId, notes, createdAt, updatedAt, syncStatus
+                ) VALUES (
+                    'workout-exercise-1', 'workout-1', 'exercise-1', '',
+                    1700000000000, 1700000000000, 'Synced'
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO workout_sets (
+                    id, workoutExerciseId, weightKg, repetitions, setCount,
+                    isWarmup, isPerSide, createdAt, updatedAt, syncStatus
+                ) VALUES (
+                    'set-1', 'workout-exercise-1', 100.0, 8, 1,
+                    0, 0, 1700000000000, 1700000000000, 'Synced'
+                )
+                """.trimIndent()
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 4, true, Migration3To4)
+
+        migrated.use { db ->
+            db.query("SELECT sortOrder FROM workout_exercises WHERE id = 'workout-exercise-1'").use { cursor ->
+                cursor.moveToFirst()
+                assert(cursor.getInt(0) == 0)
+            }
+            db.query("SELECT setType, completedAt, restSeconds FROM workout_sets WHERE id = 'set-1'").use { cursor ->
+                cursor.moveToFirst()
+                assert(cursor.getString(0) == "Normal")
+                assert(cursor.isNull(1))
+                assert(cursor.getInt(2) == 90)
+            }
+        }
+    }
+
+    @Test
+    fun migrate1To4_runsChainedMigrations() {
+        helper.createDatabase(TEST_DB, 1).use { }
+        helper.runMigrationsAndValidate(TEST_DB, 4, true, Migration1To2, Migration2To3, Migration3To4)
+    }
+
+    @Test
+    fun migrate4To5_addsCustomFoodsAndSavedMeals() {
+        helper.createDatabase(TEST_DB, 4).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO food_products (
+                    id, name, notes, isFavorite, createdAt, updatedAt, syncStatus
+                ) VALUES (
+                    'food-product-1', 'Greek Yogurt', '', 1,
+                    1700000000000, 1700000000000, 'Synced'
+                )
+                """.trimIndent()
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 5, true, Migration4To5)
+
+        migrated.use { db ->
+            db.query("SELECT isCustom, micronutrientsJson FROM food_products WHERE id = 'food-product-1'").use { cursor ->
+                cursor.moveToFirst()
+                assert(cursor.getInt(0) == 0)
+                assert(cursor.isNull(1))
+            }
+            db.query("SELECT COUNT(*) FROM saved_meals").use { cursor ->
+                cursor.moveToFirst()
+                assert(cursor.getLong(0) == 0L)
+            }
+            db.query("SELECT COUNT(*) FROM saved_meal_items").use { cursor ->
+                cursor.moveToFirst()
+                assert(cursor.getLong(0) == 0L)
+            }
+        }
+    }
+
+    @Test
+    fun migrate1To5_runsChainedMigrations() {
+        helper.createDatabase(TEST_DB, 1).use { }
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, Migration1To2, Migration2To3, Migration3To4, Migration4To5)
+    }
 }
