@@ -46,6 +46,7 @@ import javax.inject.Inject
 data class SettingsUiState(
     val n8nSettings: N8nConnectionSettings = N8nConnectionSettings(baseUrl = DefaultN8nBaseUrl),
     val temporaryPhotosOnly: Boolean = true,
+    val mealPhotoAnalysisEnabled: Boolean = false,
     val pendingSyncCount: Int = 0,
     val failedSyncCount: Int = 0,
     val latestSyncError: String? = null,
@@ -103,7 +104,8 @@ class SettingsViewModel @Inject constructor(
         baseUrlDraft,
         syncQueueDao.observeConflictCount(),
         syncQueueDao.observeLatestConflictError(),
-        settingsRepository.observeBottomNavigation()
+        settingsRepository.observeBottomNavigation(),
+        settingsRepository.observeMealPhotoAnalysisEnabled()
     ) { values ->
         val n8nSettings = values[0] as N8nConnectionSettings
         val temporaryPhotosOnly = values[1] as Boolean
@@ -116,6 +118,7 @@ class SettingsViewModel @Inject constructor(
         SettingsUiState(
             n8nSettings = n8nSettings.copy(baseUrl = values[7] as String),
             temporaryPhotosOnly = temporaryPhotosOnly,
+            mealPhotoAnalysisEnabled = values[11] as Boolean,
             pendingSyncCount = pendingSyncCount,
             failedSyncCount = values[8] as Int,
             latestSyncError = values[9] as String?,
@@ -193,6 +196,12 @@ class SettingsViewModel @Inject constructor(
     fun updateTemporaryPhotosOnly(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.updateTemporaryPhotosOnly(enabled)
+        }
+    }
+
+    fun updateMealPhotoAnalysisEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.updateMealPhotoAnalysisEnabled(enabled)
         }
     }
 

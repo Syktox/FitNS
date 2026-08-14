@@ -1,15 +1,21 @@
 package com.raysix.fitns.feature.workout
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -17,10 +23,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,8 +47,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.raysix.fitns.core.design.AdaptiveTwoColumn
+import com.raysix.fitns.core.design.AdaptiveColumn
 import com.raysix.fitns.core.design.BrandGradient
 import com.raysix.fitns.core.design.EmptyStateCard
 import com.raysix.fitns.core.design.FitNsDimens
@@ -46,6 +60,7 @@ import com.raysix.fitns.core.design.GradientHeroCard
 import com.raysix.fitns.core.design.ModernCard
 import com.raysix.fitns.core.design.ProgressRing
 import com.raysix.fitns.core.design.SectionCard
+import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionTitle
 import com.raysix.fitns.core.design.StatCard
 import com.raysix.fitns.core.design.TagChip
@@ -61,37 +76,34 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
+private val KnownEquipmentTypes = listOf(
+    "Machine",
+    "Cable",
+    "Smith Machine",
+    "Plate Loaded",
+    "Barbell",
+    "Dumbbell",
+    "Kettlebell",
+    "Bodyweight",
+    "Resistance Band",
+    "Suspension Trainer",
+    "Cardio Machine",
+    "Other"
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun WorkoutStartScreen(
     uiState: WorkoutUiState,
-    onAddExercise: (String, String, String, String) -> Unit,
-    onAddWorkout: (Exercise, Double, Int, Int, Int?, String) -> Unit,
     onSavePlan: (String, String, List<Exercise>, Int, Int, Int, Int) -> Unit,
     onUpdatePlan: (WorkoutPlan, String, String, List<Exercise>, Int, Int, Int, Int) -> Unit,
-    onSaveTemplateAsPlan: (WorkoutTemplate) -> Unit,
     onStartPlan: (WorkoutPlan) -> Unit,
     onStartTemplate: (WorkoutTemplate) -> Unit,
     onDeletePlan: (WorkoutPlan) -> Unit,
-    onShowHistory: () -> Unit
+    onShowHistory: () -> Unit,
+    onViewExercises: () -> Unit,
+    onLogExercise: (Exercise) -> Unit
 ) {
-    val fallbackExercise = uiState.exercises.firstOrNull()
-    var selectedExerciseId by rememberSaveable { mutableStateOf<String?>(null) }
-    val selectedExercise = uiState.exercises.firstOrNull { it.id == selectedExerciseId } ?: fallbackExercise
-    LaunchedEffect(fallbackExercise?.id) {
-        if (selectedExerciseId == null) selectedExerciseId = fallbackExercise?.id
-    }
-    var weight by rememberSaveable(fallbackExercise?.id) { mutableStateOf((selectedExercise?.lastWeightKg ?: 0.0).roundToInt().toString()) }
-    var reps by rememberSaveable(fallbackExercise?.id) { mutableStateOf((selectedExercise?.lastRepetitions ?: 10).toString()) }
-    var sets by rememberSaveable(fallbackExercise?.id) { mutableStateOf((selectedExercise?.lastSets ?: 3).toString()) }
-    var rpe by rememberSaveable { mutableStateOf("8") }
-    var notes by rememberSaveable { mutableStateOf("") }
-    var showAddExercise by rememberSaveable { mutableStateOf(false) }
-    var exerciseName by rememberSaveable { mutableStateOf("") }
-    var muscleGroup by rememberSaveable { mutableStateOf("") }
-    var equipmentType by rememberSaveable { mutableStateOf("Machine") }
-    var gym by rememberSaveable { mutableStateOf("") }
-    var restSeconds by rememberSaveable { mutableStateOf(0) }
     var activeTemplateId by rememberSaveable { mutableStateOf<String?>(null) }
     val activeTemplate = uiState.templates.firstOrNull { it.id == activeTemplateId }
     var activePlanId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -108,11 +120,15 @@ fun WorkoutStartScreen(
     var planRepMax by rememberSaveable { mutableStateOf("12") }
     var planRestSeconds by rememberSaveable { mutableStateOf("90") }
 
-    LaunchedEffect(restSeconds) {
-        if (restSeconds > 0) {
-            delay(1000)
-            restSeconds -= 1
-        }
+    activeTemplate?.let { template ->
+        WorkoutTemplatePreviewDialog(
+            template = template,
+            onDismiss = { activeTemplateId = null },
+            onStart = {
+                activeTemplateId = null
+                onStartTemplate(template)
+            }
+        )
     }
 
     AdaptiveTwoColumn(
@@ -253,13 +269,6 @@ fun WorkoutStartScreen(
                         onStart = {
                             activePlanId = plan.id
                             completedPlanExerciseIds = emptySet()
-                            plan.exercises.firstOrNull()?.exercise?.let { exercise ->
-                                selectedExerciseId = exercise.id
-                                weight = (exercise.lastWeightKg ?: 0.0).roundToInt().toString()
-                                reps = (exercise.lastRepetitions ?: plan.exercises.first().targetRepMin).toString()
-                                sets = plan.exercises.first().targetSets.toString()
-                                restSeconds = plan.exercises.first().restSeconds
-                            }
                             onStartPlan(plan)
                         },
                         onEdit = {
@@ -289,13 +298,7 @@ fun WorkoutStartScreen(
                             completedPlanExerciseIds + exercise.id
                         }
                     },
-                    onChooseExercise = { planExercise ->
-                        selectedExerciseId = planExercise.exercise.id
-                        weight = (planExercise.exercise.lastWeightKg ?: 0.0).roundToInt().toString()
-                        reps = (planExercise.exercise.lastRepetitions ?: planExercise.targetRepMin).toString()
-                        sets = planExercise.targetSets.toString()
-                        restSeconds = planExercise.restSeconds
-                    }
+                    onChooseExercise = { planExercise -> onLogExercise(planExercise.exercise) }
                 )
             }
             if (uiState.templates.isNotEmpty()) {
@@ -307,80 +310,25 @@ fun WorkoutStartScreen(
                             selected = activeTemplate?.id == template.id,
                             onClick = {
                                 activeTemplateId = template.id
-                                activePlanId = null
-                                template.exercises.firstOrNull()?.let { exercise ->
-                                    selectedExerciseId = exercise.id
-                                    weight = (exercise.lastWeightKg ?: 0.0).roundToInt().toString()
-                                    reps = (exercise.lastRepetitions ?: 10).toString()
-                                    sets = (exercise.lastSets ?: 3).toString()
-                                }
                             },
-                            onSave = { onSaveTemplateAsPlan(template) },
                             onStart = { onStartTemplate(template) }
                         )
                     }
                 }
-                activeTemplate?.let { template ->
-                    ActiveTemplateCard(
-                        template = template,
-                        onChooseExercise = { exercise ->
-                            selectedExerciseId = exercise.id
-                            weight = (exercise.lastWeightKg ?: 0.0).roundToInt().toString()
-                            reps = (exercise.lastRepetitions ?: 10).toString()
-                            sets = (exercise.lastSets ?: 3).toString()
-                        }
-                    )
-                }
             }
-            SectionCard(title = "Exercises", subtitle = "${uiState.exercises.size} saved exercises", trailing = {
-                ActionPill(
-                    text = if (showAddExercise) "Close" else "Add Exercise",
-                    filled = !showAddExercise,
-                    onClick = { showAddExercise = !showAddExercise }
-                )
-            }) {
-                if (showAddExercise) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(
-                            value = exerciseName,
-                            onValueChange = { exerciseName = it },
-                            label = { Text("Exercise name") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        OutlinedTextField(
-                            value = muscleGroup,
-                            onValueChange = { muscleGroup = it },
-                            label = { Text("Muscle group") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        OutlinedTextField(
-                            value = equipmentType,
-                            onValueChange = { equipmentType = it },
-                            label = { Text("Equipment type") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        OutlinedTextField(
-                            value = gym,
-                            onValueChange = { gym = it },
-                            label = { Text("Gym") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        PrimaryPillButton(
-                            text = "Save Exercise",
-                            onClick = {
-                                onAddExercise(exerciseName, muscleGroup, equipmentType, gym)
-                                exerciseName = ""
-                                muscleGroup = ""
-                                equipmentType = "Machine"
-                                gym = ""
-                                showAddExercise = false
-                            }
-                        )
-                    }
+            GradientHeroCard(brush = BrandGradient) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Exercises",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    HeroPillSmall(text = "View", filled = true, onClick = onViewExercises)
                 }
             }
             if (uiState.errorMessage != null) {
@@ -388,59 +336,8 @@ fun WorkoutStartScreen(
                     Text(uiState.errorMessage, fontWeight = FontWeight.SemiBold)
                 }
             }
-            uiState.exercises.forEach { exercise ->
-                ExerciseCard(
-                    exercise = exercise,
-                    selected = selectedExercise?.id == exercise.id,
-                    onClick = {
-                        selectedExerciseId = exercise.id
-                        weight = (exercise.lastWeightKg ?: 0.0).roundToInt().toString()
-                        reps = (exercise.lastRepetitions ?: 10).toString()
-                        sets = (exercise.lastSets ?: 3).toString()
-                    }
-                )
-            }
         },
-        side = {
-            SectionCard(title = selectedExercise?.name ?: "Choose exercise", subtitle = "Weight, reps, and machine notes") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    NumericField(value = weight, onValueChange = { weight = it }, label = "Weight kg")
-                    NumericField(value = reps, onValueChange = { reps = it }, label = "Reps")
-                    NumericField(value = sets, onValueChange = { sets = it }, label = "Sets")
-                    NumericField(value = rpe, onValueChange = { rpe = it }, label = "RPE")
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        label = { Text("Machine settings / notes") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp)
-                    )
-                    PrimaryPillButton(
-                        text = "Save Set",
-                        onClick = {
-                            selectedExercise?.let { exercise ->
-                                onAddWorkout(
-                                    exercise,
-                                    weight.toDoubleOrNull() ?: 0.0,
-                                    reps.toIntOrNull() ?: 0,
-                                    sets.toIntOrNull() ?: 1,
-                                    rpe.toIntOrNull(),
-                                    notes
-                                )
-                                notes = ""
-                                restSeconds = 90
-                            }
-                        }
-                    )
-                }
-            }
-            RestTimerCard(
-                seconds = restSeconds,
-                onStart = { restSeconds = 90 },
-                onAddTime = { restSeconds += 30 },
-                onReset = { restSeconds = 0 }
-            )
-        }
+        side = {}
     )
 }
 
@@ -448,7 +345,8 @@ fun WorkoutStartScreen(
 private fun RestTimerCard(
     seconds: Int,
     onStart: () -> Unit,
-    onAddTime: () -> Unit,
+    onAdd15Seconds: () -> Unit,
+    onAdd30Seconds: () -> Unit,
     onReset: () -> Unit
 ) {
     val target = 90
@@ -459,7 +357,7 @@ private fun RestTimerCard(
         trailing = {
             ActionPill(
                 text = if (seconds > 0) "Reset" else "Start 90s",
-                filled = seconds > 0,
+                filled = true,
                 onClick = if (seconds > 0) onReset else onStart
             )
         }
@@ -485,8 +383,8 @@ private fun RestTimerCard(
                 Modifier.weight(1f).padding(start = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ActionPill(text = if (seconds > 0) "Restart 90s" else "Start 90s", filled = true, onClick = onStart)
-                ActionPill(text = "+30s", filled = false, onClick = onAddTime, enabled = seconds > 0)
+                ActionPill(text = "+15s", filled = false, onClick = onAdd15Seconds, enabled = seconds > 0)
+                ActionPill(text = "+30s", filled = false, onClick = onAdd30Seconds, enabled = seconds > 0)
             }
         }
     }
@@ -695,11 +593,12 @@ private fun WorkoutTemplateCard(
     template: WorkoutTemplate,
     selected: Boolean,
     onClick: () -> Unit,
-    onSave: () -> Unit,
     onStart: () -> Unit
 ) {
     ModernCard(
-        modifier = Modifier.width(260.dp),
+        modifier = Modifier
+            .width(260.dp)
+            .height(300.dp),
         containerColor = if (selected) {
             MaterialTheme.colorScheme.primaryContainer
         } else {
@@ -711,40 +610,150 @@ private fun WorkoutTemplateCard(
             MaterialTheme.colorScheme.onSurface
         }
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(template.name, fontWeight = FontWeight.SemiBold)
-            Text(template.focus, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("${template.exercises.size} exercises · ${template.estimatedMinutes} min", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Text(
-                text = template.exercises.joinToString { it.name },
-                style = MaterialTheme.typography.bodySmall,
+                template.name,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.heightIn(min = 44.dp)
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionPill(text = "Preview", filled = false, onClick = onClick)
-                ActionPill(text = "Save", filled = true, onClick = onSave)
-                ActionPill(text = "Start", filled = true, onClick = onStart)
-            }
+            Text(
+                template.focus,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.heightIn(min = 40.dp)
+            )
+            Text(
+                "${template.exercises.size} exercises · ${template.estimatedMinutes} min",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            SecondaryPillButton(text = "Preview", onClick = onClick)
+            PrimaryPillButton(text = "Start Workout", onClick = onStart)
         }
     }
 }
 
 @Composable
-private fun ActiveTemplateCard(
+private fun WorkoutTemplatePreviewDialog(
     template: WorkoutTemplate,
-    onChooseExercise: (Exercise) -> Unit
+    onDismiss: () -> Unit,
+    onStart: () -> Unit
 ) {
-    SectionCard(title = "Plan: ${template.name}") {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            template.exercises.forEachIndexed { index, exercise ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f)) {
-                        Text("${index + 1}. ${exercise.name}", fontWeight = FontWeight.SemiBold)
-                        Text(exercise.muscleGroup, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.82f)
+                .padding(horizontal = 20.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    template.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    template.focus,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "${template.exercises.size} exercises · ${template.estimatedMinutes} min",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(template.exercises, key = { it.id }) { exercise ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(exercise.name, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        exercise.muscleGroup,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     }
-                    ActionPill(text = "Log", filled = true, onClick = { onChooseExercise(exercise) })
                 }
+                SecondaryPillButton(text = "Close", onClick = onDismiss)
+                PrimaryPillButton(text = "Start Workout", onClick = onStart)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EquipmentTypeDropdown(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Equipment type") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            KnownEquipmentTypes.forEach { equipment ->
+                DropdownMenuItem(
+                    text = { Text(equipment) },
+                    onClick = {
+                        onValueChange(equipment)
+                        expanded = false
+                    }
+                )
             }
         }
     }
@@ -870,30 +879,429 @@ private fun HistoryEntryCard(workout: WorkoutLogEntry, progressionHint: (Workout
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun ExerciseCard(exercise: Exercise, selected: Boolean, onClick: () -> Unit) {
-    ModernCard(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick,
-        containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(exercise.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                TagChip(text = if (selected) "Active" else exercise.muscleGroup, accent = selected)
+fun ExerciseLibraryScreen(
+    exercises: List<Exercise>,
+    errorMessage: String?,
+    exerciseToLogId: String?,
+    onExerciseToLogConsumed: () -> Unit,
+    onAddExercise: (String, String, String, String) -> Unit,
+    onAddWorkout: (Exercise, Double, Int, Int, Int?, String) -> Unit,
+    onBack: () -> Unit
+) {
+    var selectedExerciseId by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedExercise = exercises.firstOrNull { it.id == selectedExerciseId }
+    var showAddExercise by rememberSaveable { mutableStateOf(false) }
+    var exerciseName by rememberSaveable { mutableStateOf("") }
+    var muscleGroup by rememberSaveable { mutableStateOf("") }
+    var equipmentType by rememberSaveable { mutableStateOf("Machine") }
+    var gym by rememberSaveable { mutableStateOf("") }
+    var restSeconds by rememberSaveable { mutableStateOf(0) }
+    var exerciseToLogDialogId by rememberSaveable { mutableStateOf<String?>(null) }
+    val exerciseToLog = exercises.firstOrNull { it.id == exerciseToLogDialogId }
+    var logWeight by rememberSaveable { mutableStateOf("0") }
+    var logReps by rememberSaveable { mutableStateOf("10") }
+    var logSets by rememberSaveable { mutableStateOf("3") }
+    var logRpe by rememberSaveable { mutableStateOf("8") }
+    var logNotes by rememberSaveable { mutableStateOf("") }
+    val openLogDialog: (Exercise) -> Unit = { exercise ->
+        exerciseToLogDialogId = exercise.id
+        logWeight = (exercise.lastWeightKg ?: 0.0).roundToInt().toString()
+        logReps = (exercise.lastRepetitions ?: 10).toString()
+        logSets = (exercise.lastSets ?: 3).toString()
+        logRpe = "8"
+        logNotes = ""
+    }
+    val saveExercise = {
+        onAddExercise(exerciseName, muscleGroup, equipmentType, gym)
+        exerciseName = ""
+        muscleGroup = ""
+        equipmentType = "Machine"
+        gym = ""
+        showAddExercise = false
+    }
+
+    LaunchedEffect(restSeconds) {
+        if (restSeconds > 0) {
+            delay(1000)
+            restSeconds -= 1
+        }
+    }
+
+    LaunchedEffect(exerciseToLogId, exercises) {
+        exercises.firstOrNull { it.id == exerciseToLogId }?.let { exercise ->
+            openLogDialog(exercise)
+            onExerciseToLogConsumed()
+        }
+    }
+
+    exerciseToLog?.let { exercise ->
+        ExerciseLogDialog(
+            exercise = exercise,
+            weight = logWeight,
+            onWeightChange = { logWeight = it },
+            reps = logReps,
+            onRepsChange = { logReps = it },
+            sets = logSets,
+            onSetsChange = { logSets = it },
+            rpe = logRpe,
+            onRpeChange = { logRpe = it },
+            notes = logNotes,
+            onNotesChange = { logNotes = it },
+            onDismiss = { exerciseToLogDialogId = null },
+            onSave = {
+                onAddWorkout(
+                    exercise,
+                    logWeight.toDoubleOrNull() ?: 0.0,
+                    logReps.toIntOrNull() ?: 0,
+                    logSets.toIntOrNull() ?: 1,
+                    logRpe.toIntOrNull(),
+                    logNotes
+                )
+                exerciseToLogDialogId = null
+                logNotes = ""
+                restSeconds = 90
             }
+        )
+    }
+
+    val restTimer: @Composable () -> Unit = {
+        RestTimerCard(
+            seconds = restSeconds,
+            onStart = { restSeconds = 90 },
+            onAdd15Seconds = { restSeconds += 15 },
+            onAdd30Seconds = { restSeconds += 30 },
+            onReset = { restSeconds = 0 }
+        )
+    }
+    val header: @Composable () -> Unit = {
+        ScreenHeader(
+            title = "Exercises",
+            subtitle = "Browse your saved exercise library.",
+            actions = {
+                TextButton(
+                    onClick = {
+                        selectedExerciseId = null
+                        showAddExercise = !showAddExercise
+                    }
+                ) {
+                    Text(if (showAddExercise) "Close" else "Add")
+                }
+                TextButton(onClick = onBack) { Text("Back") }
+            }
+        )
+    }
+
+    if (isWideScreen()) {
+        AdaptiveTwoColumn(
+            header = header,
+            main = {
+                if (showAddExercise) {
+                    ExerciseAddCard(
+                        exerciseName = exerciseName,
+                        onExerciseNameChange = { exerciseName = it },
+                        muscleGroup = muscleGroup,
+                        onMuscleGroupChange = { muscleGroup = it },
+                        equipmentType = equipmentType,
+                        onEquipmentTypeChange = { equipmentType = it },
+                        gym = gym,
+                        onGymChange = { gym = it },
+                        onSave = saveExercise
+                    )
+                }
+                errorMessage?.let { ExerciseLibraryError(it) }
+                restTimer()
+                ExerciseNameList(
+                    exercises = exercises,
+                    selectedExerciseId = selectedExerciseId,
+                    onSelect = { selectedExerciseId = it.id },
+                    onLog = openLogDialog
+                )
+            },
+            side = {
+                selectedExercise?.let { ExerciseDetailOverview(it) }
+                    ?: EmptyStateCard(
+                        title = "Select an exercise",
+                        message = "Choose a name to see performance and progression details."
+                    )
+            }
+        )
+    } else {
+        AdaptiveColumn {
+            header()
+            restTimer()
+            if (selectedExercise == null) {
+                if (showAddExercise) {
+                    ExerciseAddCard(
+                        exerciseName = exerciseName,
+                        onExerciseNameChange = { exerciseName = it },
+                        muscleGroup = muscleGroup,
+                        onMuscleGroupChange = { muscleGroup = it },
+                        equipmentType = equipmentType,
+                        onEquipmentTypeChange = { equipmentType = it },
+                        gym = gym,
+                        onGymChange = { gym = it },
+                        onSave = saveExercise
+                    )
+                }
+                errorMessage?.let { ExerciseLibraryError(it) }
+                ExerciseNameList(
+                    exercises = exercises,
+                    selectedExerciseId = null,
+                    onSelect = { selectedExerciseId = it.id },
+                    onLog = openLogDialog
+                )
+            } else {
+                ExerciseDetailOverview(selectedExercise)
+                PrimaryPillButton(
+                    text = "All exercises",
+                    onClick = { selectedExerciseId = null }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciseLogDialog(
+    exercise: Exercise,
+    weight: String,
+    onWeightChange: (String) -> Unit,
+    reps: String,
+    onRepsChange: (String) -> Unit,
+    sets: String,
+    onSetsChange: (String) -> Unit,
+    rpe: String,
+    onRpeChange: (String) -> Unit,
+    notes: String,
+    onNotesChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = 640.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.background,
+                contentColor = MaterialTheme.colorScheme.onBackground,
+                tonalElevation = 0.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        "Log ${exercise.name}",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Enter the completed set details.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    NumericField(value = weight, onValueChange = onWeightChange, label = "Weight kg")
+                    NumericField(value = reps, onValueChange = onRepsChange, label = "Reps")
+                    NumericField(value = sets, onValueChange = onSetsChange, label = "Sets")
+                    NumericField(value = rpe, onValueChange = onRpeChange, label = "RPE")
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = onNotesChange,
+                        label = { Text("Machine settings / notes") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    SecondaryPillButton(text = "Cancel", onClick = onDismiss)
+                    PrimaryPillButton(
+                        text = "Save Log",
+                        enabled = reps.toIntOrNull() != null && sets.toIntOrNull() != null,
+                        onClick = onSave
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciseNameList(
+    exercises: List<Exercise>,
+    selectedExerciseId: String?,
+    onSelect: (Exercise) -> Unit,
+    onLog: (Exercise) -> Unit
+) {
+    if (exercises.isEmpty()) {
+        EmptyStateCard(
+            title = "No exercises yet",
+            message = "Use Add above to create your first exercise."
+        )
+        return
+    }
+    SectionCard(title = "Your exercises", subtitle = "${exercises.size} saved") {
+        exercises.sortedBy { it.name.lowercase() }.forEach { exercise ->
+            val selected = exercise.id == selectedExerciseId
+            Surface(
+                onClick = { onSelect(exercise) },
+                shape = RoundedCornerShape(16.dp),
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerLow
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = exercise.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f).padding(start = 6.dp)
+                    )
+                    ActionPill(
+                        text = "Log",
+                        filled = true,
+                        onClick = { onLog(exercise) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExerciseAddCard(
+    exerciseName: String,
+    onExerciseNameChange: (String) -> Unit,
+    muscleGroup: String,
+    onMuscleGroupChange: (String) -> Unit,
+    equipmentType: String,
+    onEquipmentTypeChange: (String) -> Unit,
+    gym: String,
+    onGymChange: (String) -> Unit,
+    onSave: () -> Unit
+) {
+    SectionCard(title = "Add exercise") {
+        OutlinedTextField(
+            value = exerciseName,
+            onValueChange = onExerciseNameChange,
+            label = { Text("Exercise name") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        )
+        OutlinedTextField(
+            value = muscleGroup,
+            onValueChange = onMuscleGroupChange,
+            label = { Text("Muscle group") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        )
+        EquipmentTypeDropdown(
+            value = equipmentType,
+            onValueChange = onEquipmentTypeChange,
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = gym,
+            onValueChange = onGymChange,
+            label = { Text("Gym") },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        )
+        PrimaryPillButton(
+            text = "Save Exercise",
+            enabled = exerciseName.isNotBlank() && muscleGroup.isNotBlank(),
+            onClick = onSave
+        )
+    }
+}
+
+@Composable
+private fun ExerciseLibraryError(message: String) {
+    ModernCard(
+        containerColor = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer
+    ) {
+        Text(message, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun ExerciseDetailOverview(exercise: Exercise) {
+    GradientHeroCard(brush = BrandGradient) {
+        val onPrimary = MaterialTheme.colorScheme.onPrimary
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                "Last workout: ${exercise.lastWeightKg?.roundToInt() ?: 0} kg x ${exercise.lastRepetitions ?: 0} x ${exercise.lastSets ?: 0}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                "Exercise overview",
+                style = MaterialTheme.typography.labelMedium,
+                color = onPrimary.copy(alpha = 0.82f)
             )
-            Text("Personal best: ${exercise.personalBestKg?.roundToInt() ?: 0} kg · Est. 1RM: ${exercise.estimatedOneRepMax()} kg", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                exercise.name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = onPrimary
+            )
             Text(
                 exercise.nextTarget(),
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+                color = onPrimary
             )
         }
+    }
+    SectionCard(title = "Exercise") {
+        ExerciseDetailRow("Muscle group", exercise.muscleGroup.ifBlank { "Not specified" })
+    }
+    SectionCard(title = "Performance") {
+        val lastWorkout = if (
+            exercise.lastWeightKg != null ||
+            exercise.lastRepetitions != null ||
+            exercise.lastSets != null
+        ) {
+            "${exercise.lastWeightKg?.formatExerciseWeight() ?: "-"} kg · ${exercise.lastRepetitions ?: "-"} reps · ${exercise.lastSets ?: "-"} sets"
+        } else {
+            "Not logged yet"
+        }
+        ExerciseDetailRow("Last workout", lastWorkout)
+        ExerciseDetailRow("Personal best", exercise.personalBestKg?.let { "${it.formatExerciseWeight()} kg" } ?: "Not set")
+        ExerciseDetailRow("Estimated 1RM", exercise.estimatedOneRepMax().takeIf { it > 0 }?.let { "$it kg" } ?: "Not available")
+    }
+}
+
+@Composable
+private fun ExerciseDetailRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(0.4f)
+        )
+        Text(
+            value,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(0.6f)
+        )
     }
 }
 
@@ -975,6 +1383,27 @@ private fun PrimaryPillButton(text: String, onClick: () -> Unit, enabled: Boolea
 }
 
 @Composable
+private fun SecondaryPillButton(text: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 13.dp)
+        )
+    }
+}
+
+@Composable
 private fun NumericField(value: String, onValueChange: (String) -> Unit, label: String, modifier: Modifier = Modifier.fillMaxWidth()) {
     OutlinedTextField(
         value = value,
@@ -1005,6 +1434,11 @@ private fun Exercise.estimatedOneRepMax(): Int {
     val reps = lastRepetitions ?: 0
     if (weight <= 0.0 || reps <= 0) return 0
     return (weight * (1.0 + reps / 30.0)).roundToInt()
+}
+
+private fun Double.formatExerciseWeight(): String {
+    val rounded = (this * 10.0).roundToInt() / 10.0
+    return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
 }
 
 private fun Exercise.nextTarget(): String {

@@ -104,6 +104,7 @@ interface N8nRepository {
 interface SettingsRepository {
     fun observeN8nSettings(): Flow<N8nConnectionSettings>
     fun observeTemporaryPhotosOnly(): Flow<Boolean>
+    fun observeMealPhotoAnalysisEnabled(): Flow<Boolean>
     fun observeOnboardingCompleted(): Flow<Boolean>
     fun observeGoogleAccount(): Flow<GoogleAccount?>
     fun observeAppearanceMode(): Flow<AppearanceMode>
@@ -111,6 +112,7 @@ interface SettingsRepository {
     suspend fun updateN8nBaseUrl(baseUrl: String)
     suspend fun updateSyncEnabled(enabled: Boolean)
     suspend fun updateTemporaryPhotosOnly(enabled: Boolean)
+    suspend fun updateMealPhotoAnalysisEnabled(enabled: Boolean)
     suspend fun completeOnboarding()
     suspend fun saveGoogleAccount(account: GoogleAccount)
     suspend fun clearGoogleAccount()

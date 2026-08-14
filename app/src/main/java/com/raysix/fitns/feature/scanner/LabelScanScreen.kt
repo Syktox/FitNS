@@ -75,16 +75,17 @@ private fun CaptureStep(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                    Text("Cancel")
+                }
             } else {
                 CameraCaptureView(
                     onImageBytes = onImageCaptured,
-                    captureButtonLabel = "Capture label"
+                    captureButtonLabel = "Capture label",
+                    onCancel = onCancel
                 )
             }
             errorMessage?.let { ErrorBanner(message = it) }
-            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                Text("Cancel")
-            }
         }
     )
 }

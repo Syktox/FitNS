@@ -72,6 +72,21 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    fun saveNutritionGoal(goal: NutritionGoal) {
+        viewModelScope.launch {
+            when (val result = profileRepository.saveNutritionGoal(goal)) {
+                is AppResult.Success -> {
+                    errorMessage.value = null
+                    statusMessage.value = "Nutrition goals saved"
+                }
+                is AppResult.Failure -> {
+                    statusMessage.value = null
+                    errorMessage.value = result.error.toMessage()
+                }
+            }
+        }
+    }
+
     private fun AppError.toMessage(): String {
         return when (this) {
             is AppError.Validation -> message

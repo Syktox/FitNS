@@ -4,8 +4,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,7 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -38,14 +35,16 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.raysix.fitns.core.design.AdaptiveTwoColumn
+import com.raysix.fitns.core.design.ActivityLevelSelector
+import com.raysix.fitns.core.design.BiologicalSexDropdown
 import com.raysix.fitns.core.design.ErrorBanner
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
-import com.raysix.fitns.domain.model.NutritionGoal
+import com.raysix.fitns.core.design.FitnessGoalSelector
 import com.raysix.fitns.domain.model.UserProfile
 import com.raysix.fitns.domain.usecase.NutritionGoalEstimator
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(
     onDone: () -> Unit,
@@ -70,13 +69,8 @@ fun OnboardingScreen(
     var activity by rememberSaveable { mutableStateOf("") }
     var trainingDays by rememberSaveable { mutableStateOf("") }
     var goalName by rememberSaveable { mutableStateOf("") }
-    var calories by rememberSaveable { mutableStateOf("") }
-    var protein by rememberSaveable { mutableStateOf("") }
-    var carbs by rememberSaveable { mutableStateOf("") }
-    var fat by rememberSaveable { mutableStateOf("") }
-    var fiber by rememberSaveable { mutableStateOf("") }
-    var water by rememberSaveable { mutableStateOf("") }
     var initialized by rememberSaveable { mutableStateOf(false) }
+    var profileSetupStarted by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(uiState.profile, uiState.nutritionGoal) {
         if (initialized) return@LaunchedEffect
@@ -88,14 +82,20 @@ fun OnboardingScreen(
         activity = uiState.profile.activityLevel
         trainingDays = uiState.profile.trainingDaysPerWeek.toString()
         goalName = uiState.profile.goal
-        calories = uiState.nutritionGoal.caloriesKcal.formatPlain()
-        protein = uiState.nutritionGoal.proteinGrams.formatPlain()
-        carbs = uiState.nutritionGoal.carbohydrateGrams.formatPlain()
-        fat = uiState.nutritionGoal.fatGrams.formatPlain()
-        fiber = uiState.nutritionGoal.fiberGrams.formatPlain()
-        water = uiState.nutritionGoal.waterMilliliters.formatPlain()
         initialized = true
     }
+
+    LaunchedEffect(uiState.googleAccount) {
+        if (uiState.googleAccount != null) profileSetupStarted = true
+    }
+
+    val estimatedGoal = NutritionGoalEstimator.estimate(
+        weightKg = weight.toDoubleOrNull(),
+        goal = goalName.ifBlank { "Maintain" },
+        activityLevel = activity.ifBlank { "Moderate" }
+    )
+    val canSaveProfile = weight.toDoubleOrNull()?.let { it in 20.0..500.0 } == true &&
+        activity.isNotBlank() && goalName.isNotBlank()
 
     val signInLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -115,220 +115,183 @@ fun OnboardingScreen(
             )
         },
         main = {
-            SectionCard(title = "Sign in with Google", subtitle = "Optional: connect your Google account to personalize the app.") {
-            val googleAccount = uiState.googleAccount
-            if (googleAccount == null) {
-                Surface(
-                    onClick = {
-                        val intent = viewModel.createSignInIntent()
-                        if (intent != null) {
-                            signInLauncher.launch(intent)
-                        } else {
-                            viewModel.setSignInError(
-                                "Google sign-in is not configured yet. Add GOOGLE_WEB_CLIENT_ID to local.properties and rebuild."
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurface
+            if (!profileSetupStarted) {
+                SectionCard(
+                    title = "Continue with an account",
+                    subtitle = "Sign in or create a local FitNS profile."
                 ) {
-                    Row(
-                        Modifier.padding(vertical = 13.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = GoogleGLogo,
-                            contentDescription = null,
-                            tint = Color.Unspecified,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = "Continue with Google",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(start = 10.dp)
-                        )
+                    val googleAccount = uiState.googleAccount
+                    if (googleAccount == null) {
+                        Surface(
+                            onClick = {
+                                val intent = viewModel.createSignInIntent()
+                                if (intent != null) {
+                                    signInLauncher.launch(intent)
+                                } else {
+                                    viewModel.setSignInError(
+                                        "Google sign-in is not configured yet. Add GOOGLE_WEB_CLIENT_ID to local.properties and rebuild."
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(999.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ) {
+                            Row(
+                                Modifier.padding(vertical = 13.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = GoogleGLogo,
+                                    contentDescription = null,
+                                    tint = Color.Unspecified,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Continue with Google",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(start = 10.dp)
+                                )
+                            }
+                        }
                     }
+                    uiState.signInError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
+                    }
+                }
+                SectionCard(
+                    title = "Create a FitNS profile",
+                    subtitle = "No account required. Your profile is saved locally and queued for your configured n8n sync."
+                ) {
+                    OnboardingActionButton(
+                        text = "Create profile",
+                        onClick = { profileSetupStarted = true }
+                    )
                 }
             } else {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        if (googleAccount.displayName.isNotBlank()) {
-                            Text(googleAccount.displayName, fontWeight = FontWeight.SemiBold)
+                SectionCard(title = "Your profile", subtitle = "These inputs calculate your first nutrition targets automatically.") {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            NumericField(age, { age = it }, "Age", Modifier.weight(1f))
+                            NumericField(trainingDays, { trainingDays = it }, "Training days", Modifier.weight(1f))
                         }
-                        Text(
-                            text = googleAccount.email,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        BiologicalSexDropdown(
+                            value = physiology,
+                            onValueChange = { physiology = it },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            NumericField(height, { height = it }, "Height cm", Modifier.weight(1f))
+                            NumericField(weight, { weight = it }, "Weight kg", Modifier.weight(1f))
+                        }
+                        NumericField(targetWeight, { targetWeight = it }, "Target weight kg")
+                        ActivityLevelSelector(
+                            selected = activity,
+                            onSelected = { activity = it }
+                        )
+                        FitnessGoalSelector(
+                            selected = goalName,
+                            onSelected = { goalName = it }
                         )
                     }
-                    Surface(
-                        onClick = viewModel::onGoogleSignOut,
-                        shape = RoundedCornerShape(999.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ) {
-                        Text(
-                            "Disconnect",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                        )
-                    }
                 }
             }
-            uiState.signInError?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
-            }
-        }
-        SectionCard(title = "Profile") {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(age, { age = it }, "Age", Modifier.weight(1f))
-                    NumericField(trainingDays, { trainingDays = it }, "Training days", Modifier.weight(1f))
-                }
-                OutlinedTextField(
-                    physiology, { physiology = it },
-                    label = { Text("Physiology") },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(height, { height = it }, "Height cm", Modifier.weight(1f))
-                    NumericField(weight, { weight = it }, "Weight kg", Modifier.weight(1f))
-                }
-                NumericField(targetWeight, { targetWeight = it }, "Target weight kg")
-                OutlinedTextField(
-                    activity, { activity = it },
-                    label = { Text("Activity level") },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                ChoiceChips(
-                    options = listOf("Low", "Moderate", "High"),
-                    selected = activity,
-                    onSelected = { activity = it }
-                )
-                OutlinedTextField(
-                    goalName, { goalName = it },
-                    label = { Text("Goal") },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                ChoiceChips(
-                    options = listOf("Maintain", "Lose Fat", "Build Muscle"),
-                    selected = goalName,
-                    onSelected = { goalName = it }
-                )
-            }
-        }
         },
         side = {
-            SectionCard(
-                title = "Nutrition Goals",
-            subtitle = "Estimates use body weight, activity, and goal. Adjust them after observing progress.",
-            trailing = {
-                Surface(
-                    onClick = {
-                        val estimate = NutritionGoalEstimator.estimate(
-                            weightKg = weight.toDoubleOrNull(),
-                            goal = goalName.ifBlank { "Maintain" },
-                            activityLevel = activity.ifBlank { "Moderate" }
-                        )
-                        calories = estimate.caloriesKcal.formatPlain()
-                        protein = estimate.proteinGrams.formatPlain()
-                        carbs = estimate.carbohydrateGrams.formatPlain()
-                        fat = estimate.fatGrams.formatPlain()
-                        fiber = estimate.fiberGrams.formatPlain()
-                        water = estimate.waterMilliliters.formatPlain()
-                    },
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ) {
+            if (!profileSetupStarted) {
+                SectionCard(title = "Personalized from the start") {
+                    Text("FitNS uses your weight, activity level, and goal to calculate your initial calorie, macro, fiber, and water targets.")
                     Text(
-                        "Estimate",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                        "You can fine-tune every nutrition target later in Settings.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                SectionCard(
+                    title = "Calculated nutrition targets",
+                    subtitle = "Updated automatically from your profile inputs."
+                ) {
+                    GoalSummaryRow("Calories", "${estimatedGoal.caloriesKcal.formatPlain()} kcal")
+                    GoalSummaryRow("Protein", "${estimatedGoal.proteinGrams.formatPlain()} g")
+                    GoalSummaryRow("Carbohydrates", "${estimatedGoal.carbohydrateGrams.formatPlain()} g")
+                    GoalSummaryRow("Fat", "${estimatedGoal.fatGrams.formatPlain()} g")
+                    GoalSummaryRow("Fiber", "${estimatedGoal.fiberGrams.formatPlain()} g")
+                    GoalSummaryRow("Water", "${estimatedGoal.waterMilliliters.formatPlain()} ml")
+                    Text(
+                        "These are starting values. Change them anytime in Settings → Nutrition goals.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                uiState.errorMessage?.let { ErrorBanner(it) }
+                OnboardingActionButton(
+                    text = if (uiState.saving) "Saving..." else "Create profile",
+                    enabled = canSaveProfile && !uiState.saving,
+                    onClick = {
+                        viewModel.save(
+                            profile = UserProfile(
+                                age = age.toIntOrNull(),
+                                sexOrPhysiology = physiology.ifBlank { null },
+                                heightCm = height.toDoubleOrNull(),
+                                weightKg = weight.toDoubleOrNull(),
+                                targetWeightKg = targetWeight.toDoubleOrNull(),
+                                activityLevel = activity.ifBlank { "Moderate" },
+                                trainingDaysPerWeek = trainingDays.toIntOrNull() ?: 0,
+                                goal = goalName.ifBlank { "Maintain" }
+                            ),
+                            goal = estimatedGoal,
+                            onComplete = onDone
+                        )
+                    }
+                )
+                if (!canSaveProfile) {
+                    Text(
+                        "Enter a valid body weight and choose an activity level and goal to continue.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
             }
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                NumericField(calories, { calories = it }, "Calories kcal")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(protein, { protein = it }, "Protein g", Modifier.weight(1f))
-                    NumericField(carbs, { carbs = it }, "Carbs g", Modifier.weight(1f))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(fat, { fat = it }, "Fat g", Modifier.weight(1f))
-                    NumericField(fiber, { fiber = it }, "Fiber g", Modifier.weight(1f))
-                }
-                NumericField(water, { water = it }, "Water ml")
-            }
-        }
-        uiState.errorMessage?.let {
-            ErrorBanner(it)
-        }
-        Surface(
-            onClick = {
-                viewModel.save(
-                    profile = UserProfile(
-                        age = age.toIntOrNull(),
-                        sexOrPhysiology = physiology.ifBlank { null },
-                        heightCm = height.toDoubleOrNull(),
-                        weightKg = weight.toDoubleOrNull(),
-                        targetWeightKg = targetWeight.toDoubleOrNull(),
-                        activityLevel = activity.ifBlank { "Moderate" },
-                        trainingDaysPerWeek = trainingDays.toIntOrNull() ?: 0,
-                        goal = goalName.ifBlank { "Maintain" }
-                    ),
-                    goal = NutritionGoal(
-                        caloriesKcal = calories.toDoubleOrNull() ?: 0.0,
-                        proteinGrams = protein.toDoubleOrNull() ?: 0.0,
-                        carbohydrateGrams = carbs.toDoubleOrNull() ?: 0.0,
-                        fatGrams = fat.toDoubleOrNull() ?: 0.0,
-                        fiberGrams = fiber.toDoubleOrNull() ?: 0.0,
-                        waterMilliliters = water.toDoubleOrNull() ?: 0.0
-                    ),
-                    onComplete = onDone
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(999.dp),
-            color = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary
-        ) {
-            Text(
-                text = if (uiState.saving) "Saving..." else "Get Started",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(vertical = 14.dp)
-            )
-        }
         }
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun ChoiceChips(options: List<String>, selected: String, onSelected: (String) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEach { option ->
-            FilterChip(
-                selected = selected.equals(option, ignoreCase = true),
-                onClick = { onSelected(option) },
-                label = { Text(option) }
-            )
-        }
+private fun GoalSummaryRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+private fun OnboardingActionButton(
+    text: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(vertical = 14.dp)
+        )
     }
 }
 

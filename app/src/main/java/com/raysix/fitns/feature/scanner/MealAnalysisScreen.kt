@@ -1,22 +1,26 @@
 package com.raysix.fitns.feature.scanner
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -41,65 +45,58 @@ fun MealAnalysisScreen(
         header = {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 ScreenHeader(
-                    title = "Meal Analysis",
-                    subtitle = "Photo analysis estimates are approximations. Review everything before saving."
+                    title = when (state.phase) {
+                        MealAnalysisPhase.Idle -> "Scan Meal"
+                        MealAnalysisPhase.Analyzing -> "Analyzing Meal"
+                        MealAnalysisPhase.Review, MealAnalysisPhase.Saving -> "Review Meal"
+                    },
+                    subtitle = when (state.phase) {
+                        MealAnalysisPhase.Idle -> "Capture a clear photo. Analysis starts automatically."
+                        MealAnalysisPhase.Analyzing -> "Finding foods and estimating their nutrition."
+                        MealAnalysisPhase.Review, MealAnalysisPhase.Saving -> "Check the macros and choose where to log the meal."
+                    }
                 )
             }
         },
         gutter = {
-            if (state.phase == MealAnalysisPhase.Idle || state.phase == MealAnalysisPhase.Analyzing) {
-                CameraCaptureView(
+            when (state.phase) {
+                MealAnalysisPhase.Idle -> CameraCaptureView(
                     onImageBytes = viewModel::onImageCaptured,
-                    captureButtonLabel = if (state.previewBitmap != null) "Retake photo" else "Capture photo"
+                    captureButtonLabel = "Capture meal",
+                    onCancel = onClose
                 )
-                state.previewBitmap?.let { bitmap ->
-                    ModernCard {
-                        Text(
-                            "Photo captured. Confirm consent below before analysis.",
-                            modifier = Modifier.padding(14.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                MealAnalysisPhase.Analyzing,
+                MealAnalysisPhase.Review,
+                MealAnalysisPhase.Saving -> {
+                    state.previewBitmap?.let { bitmap ->
+                        ModernCard {
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = "Captured meal",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 380.dp)
+                            )
+                        }
                     }
                 }
             }
         },
         main = {
-            if (state.phase == MealAnalysisPhase.Idle || state.phase == MealAnalysisPhase.Analyzing) {
+            if (state.phase == MealAnalysisPhase.Analyzing) {
                 ModernCard {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = state.consentGranted,
-                                onCheckedChange = viewModel::onConsentChange
-                            )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator()
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("Analyzing your meal…", fontWeight = FontWeight.SemiBold)
                             Text(
-                                "I agree that this photo is uploaded to my configured n8n instance for analysis.",
+                                "This usually takes a few seconds.",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        SectionTitle("Meal type")
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            listOf(MealType.Breakfast, MealType.Lunch, MealType.Dinner, MealType.Snack).forEach { type ->
-                                FilterChip(
-                                    selected = state.mealType == type,
-                                    onClick = { viewModel.onMealTypeChange(type) },
-                                    label = { Text(type.name) }
-                                )
-                            }
-                        }
-                        Button(
-                            onClick = viewModel::analyze,
-                            enabled = state.consentGranted && !state.loading,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                if (state.loading) "Analyzing..." else "Analyze meal"
                             )
                         }
                     }
@@ -110,7 +107,30 @@ fun MealAnalysisScreen(
                 ErrorBanner(message = message)
             }
 
-            if (state.phase == MealAnalysisPhase.Review) {
+            if (state.phase == MealAnalysisPhase.Review || state.phase == MealAnalysisPhase.Saving) {
+                MealMacroSummary(state.items)
+                ModernCard {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SectionTitle("Meal type")
+                        Text(
+                            "Choose where these foods should be logged.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(MealType.Breakfast, MealType.Lunch, MealType.Dinner, MealType.Snack).forEach { type ->
+                                FilterChip(
+                                    selected = state.mealType == type,
+                                    onClick = { viewModel.onMealTypeChange(type) },
+                                    enabled = !state.loading,
+                                    label = { Text(type.name) }
+                                )
+                            }
+                        }
+                    }
+                }
                 state.disclaimer?.let { disclaimer ->
                     ModernCard {
                         Text(
@@ -146,6 +166,45 @@ fun MealAnalysisScreen(
             }
         }
     )
+}
+
+@Composable
+private fun MealMacroSummary(items: List<EditableMealItem>) {
+    val calories = items.sumOf { it.calories.toDoubleOrNull() ?: 0.0 }
+    val protein = items.sumOf { it.protein.toDoubleOrNull() ?: 0.0 }
+    val carbs = items.sumOf { it.carbs.toDoubleOrNull() ?: 0.0 }
+    val fat = items.sumOf { it.fat.toDoubleOrNull() ?: 0.0 }
+
+    ModernCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionTitle("Estimated meal totals")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MealMacroMetric("Calories", "${calories.roundToInt()} kcal", Modifier.weight(1f))
+                MealMacroMetric("Protein", "${protein.roundToInt()} g", Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MealMacroMetric("Carbohydrates", "${carbs.roundToInt()} g", Modifier.weight(1f))
+                MealMacroMetric("Fat", "${fat.roundToInt()} g", Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MealMacroMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+    }
 }
 
 @Composable

@@ -39,6 +39,12 @@ class DataStoreSettingsRepository @Inject constructor(
         }
     }
 
+    override fun observeMealPhotoAnalysisEnabled(): Flow<Boolean> {
+        return context.fitNsSettingsDataStore.data.map { preferences ->
+            preferences[MealPhotoAnalysisEnabledKey] ?: false
+        }
+    }
+
     override fun observeOnboardingCompleted(): Flow<Boolean> {
         return context.fitNsSettingsDataStore.data.map { preferences ->
             preferences[OnboardingCompletedKey] ?: false
@@ -100,6 +106,12 @@ class DataStoreSettingsRepository @Inject constructor(
         }
     }
 
+    override suspend fun updateMealPhotoAnalysisEnabled(enabled: Boolean) {
+        context.fitNsSettingsDataStore.edit { preferences ->
+            preferences[MealPhotoAnalysisEnabledKey] = enabled
+        }
+    }
+
     override suspend fun completeOnboarding() {
         context.fitNsSettingsDataStore.edit { preferences ->
             preferences[OnboardingCompletedKey] = true
@@ -152,6 +164,7 @@ class DataStoreSettingsRepository @Inject constructor(
         val N8nBaseUrlKey = stringPreferencesKey("n8n_base_url")
         val N8nSyncEnabledKey = booleanPreferencesKey("n8n_sync_enabled")
         val TemporaryPhotosOnlyKey = booleanPreferencesKey("temporary_photos_only")
+        val MealPhotoAnalysisEnabledKey = booleanPreferencesKey("meal_photo_analysis_enabled")
         val OnboardingCompletedKey = booleanPreferencesKey("onboarding_completed")
         val GoogleAccountEmailKey = stringPreferencesKey("google_account_email")
         val GoogleAccountNameKey = stringPreferencesKey("google_account_name")

@@ -325,9 +325,13 @@ private fun NutritionTargetsCard(dashboard: DailyNutritionDashboard) {
     val caloriesPercent = if (dashboard.goal.caloriesKcal > 0) {
         (dashboard.total.caloriesKcal / dashboard.goal.caloriesKcal).toFloat()
     } else 0f
+    val targetSpacing = if (isWideScreen()) 32.dp else 20.dp
 
     SectionCard(title = "Nutrition Targets") {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(targetSpacing)
+        ) {
             Column(
                 Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp)

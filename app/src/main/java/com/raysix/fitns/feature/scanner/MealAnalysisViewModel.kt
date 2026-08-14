@@ -11,7 +11,6 @@ import com.raysix.fitns.core.model.AppError
 import com.raysix.fitns.core.model.AppResult
 import com.raysix.fitns.domain.model.DataQuality
 import com.raysix.fitns.domain.model.FoodLogEntry
-import com.raysix.fitns.domain.model.MealAnalysisResult
 import com.raysix.fitns.domain.model.MealType
 import com.raysix.fitns.domain.model.NutritionFacts
 import com.raysix.fitns.domain.repository.N8nRepository
@@ -45,7 +44,6 @@ data class EditableMealItem(
 data class MealAnalysisUiState(
     val phase: MealAnalysisPhase = MealAnalysisPhase.Idle,
     val previewBitmap: ImageBitmap? = null,
-    val consentGranted: Boolean = false,
     val mealType: MealType = MealType.Snack,
     val items: List<EditableMealItem> = emptyList(),
     val disclaimer: String? = null,
@@ -60,7 +58,6 @@ class MealAnalysisViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
     private val state = MutableStateFlow(MealAnalysisUiState())
-    private var pendingBase64: String? = null
 
     val uiState: StateFlow<MealAnalysisUiState> = state.stateIn(
         scope = viewModelScope,
@@ -69,19 +66,89 @@ class MealAnalysisViewModel @Inject constructor(
     )
 
     fun onImageCaptured(bytes: ByteArray) {
+        state.value = state.value.copy(
+            loading = true,
+            errorMessage = null,
+            phase = MealAnalysisPhase.Analyzing
+        )
         viewModelScope.launch {
-            val bitmap = withContext(Dispatchers.Default) { decodeScaled(bytes) } ?: return@launch
-            pendingBase64 = withContext(Dispatchers.Default) { compressToBase64(bitmap) }
+            val uploadEnabled = settingsRepository.observeMealPhotoAnalysisEnabled().first()
+            if (!uploadEnabled) {
+                state.value = state.value.copy(
+                    loading = false,
+                    phase = MealAnalysisPhase.Idle,
+                    previewBitmap = null,
+                    errorMessage = "Enable meal photo analysis in Settings → Privacy & Data before scanning."
+                )
+                return@launch
+            }
+
+            val bitmap = withContext(Dispatchers.Default) { decodeScaled(bytes) }
+            if (bitmap == null) {
+                state.value = state.value.copy(
+                    loading = false,
+                    phase = MealAnalysisPhase.Idle,
+                    errorMessage = "The photo could not be read. Try taking it again."
+                )
+                return@launch
+            }
+            val base64 = withContext(Dispatchers.Default) { compressToBase64(bitmap) }
             state.value = state.value.copy(
                 previewBitmap = bitmap.asImageBitmap(),
-                errorMessage = null,
-                phase = MealAnalysisPhase.Idle
+                errorMessage = null
             )
-        }
-    }
 
-    fun onConsentChange(granted: Boolean) {
-        state.value = state.value.copy(consentGranted = granted)
+            val settings = settingsRepository.observeN8nSettings().first()
+            val token = settingsRepository.readBearerToken()
+            val result = n8nRepository.analyzeMealImage(
+                baseUrl = settings.baseUrl,
+                bearerToken = token,
+                imageBase64 = base64,
+                consentGranted = true
+            )
+            state.value = when (result) {
+                is AppResult.Success -> {
+                    val detectedItems = result.value.items.filter { it.name.isNotBlank() }
+                    if (detectedItems.isEmpty()) {
+                        state.value.copy(
+                            loading = false,
+                            phase = MealAnalysisPhase.Idle,
+                            previewBitmap = null,
+                            items = emptyList(),
+                            disclaimer = null,
+                            errorMessage = "No food was detected. Try another angle or choose a clearer photo."
+                        )
+                    } else {
+                        state.value.copy(
+                            phase = MealAnalysisPhase.Review,
+                            loading = false,
+                            items = detectedItems.mapIndexed { index, item ->
+                                EditableMealItem(
+                                    id = "item-$index",
+                                    name = item.name,
+                                    grams = item.estimatedGrams.formatPlain(),
+                                    confidence = item.confidence,
+                                    calories = item.nutrition.caloriesKcal.formatPlain(),
+                                    protein = item.nutrition.proteinGrams.formatPlain(),
+                                    carbs = item.nutrition.carbohydratesGrams.formatPlain(),
+                                    fat = item.nutrition.fatGrams.formatPlain()
+                                )
+                            },
+                            disclaimer = result.value.disclaimer,
+                            errorMessage = null
+                        )
+                    }
+                }
+                is AppResult.Failure -> state.value.copy(
+                    loading = false,
+                    phase = MealAnalysisPhase.Idle,
+                    previewBitmap = null,
+                    items = emptyList(),
+                    disclaimer = null,
+                    errorMessage = result.error.toUserMessage()
+                )
+            }
+        }
     }
 
     fun onMealTypeChange(mealType: MealType) {
@@ -102,57 +169,6 @@ class MealAnalysisViewModel @Inject constructor(
 
     fun removeItem(id: String) {
         state.value = state.value.copy(items = state.value.items.filterNot { it.id == id })
-    }
-
-    fun analyze() {
-        val snapshot = state.value
-        if (!snapshot.consentGranted) {
-            state.value = snapshot.copy(errorMessage = "Confirm consent before uploading the photo.")
-            return
-        }
-        val base64 = pendingBase64
-        if (base64.isNullOrBlank()) {
-            state.value = snapshot.copy(errorMessage = "Capture a photo of the meal first.")
-            return
-        }
-        state.value = snapshot.copy(loading = true, errorMessage = null, phase = MealAnalysisPhase.Analyzing)
-
-        viewModelScope.launch {
-            val settings = settingsRepository.observeN8nSettings().first()
-            val token = settingsRepository.readBearerToken()
-            val result = n8nRepository.analyzeMealImage(
-                baseUrl = settings.baseUrl,
-                bearerToken = token,
-                imageBase64 = base64,
-                consentGranted = true
-            )
-            state.value = when (result) {
-                is AppResult.Success -> MealAnalysisUiState(
-                    phase = MealAnalysisPhase.Review,
-                    previewBitmap = state.value.previewBitmap,
-                    consentGranted = true,
-                    mealType = state.value.mealType,
-                    items = result.value.items.mapIndexed { index, item ->
-                        EditableMealItem(
-                            id = "item-$index",
-                            name = item.name,
-                            grams = item.estimatedGrams.formatPlain(),
-                            confidence = item.confidence,
-                            calories = item.nutrition.caloriesKcal.formatPlain(),
-                            protein = item.nutrition.proteinGrams.formatPlain(),
-                            carbs = item.nutrition.carbohydratesGrams.formatPlain(),
-                            fat = item.nutrition.fatGrams.formatPlain()
-                        )
-                    },
-                    disclaimer = result.value.disclaimer
-                )
-                is AppResult.Failure -> state.value.copy(
-                    loading = false,
-                    phase = MealAnalysisPhase.Idle,
-                    errorMessage = result.error.toUserMessage()
-                )
-            }
-        }
     }
 
     fun save(onSaved: () -> Unit) {

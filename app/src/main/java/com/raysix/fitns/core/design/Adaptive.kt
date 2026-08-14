@@ -13,11 +13,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 
 private const val WideThresholdDp = 700
+
+val LocalFloatingNavigationClearance = staticCompositionLocalOf { 0.dp }
 
 /**
  * True when the current screen width is large enough for two-pane layouts
@@ -46,12 +49,14 @@ fun AdaptiveColumn(
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(16.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val bottomClearance = LocalFloatingNavigationClearance.current
     Column(
         modifier = modifier
             .fillMaxWidth()
             .widthIn(max = 860.dp)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = adaptiveHorizontalPadding()),
+            .padding(horizontal = adaptiveHorizontalPadding())
+            .padding(bottom = bottomClearance),
         verticalArrangement = verticalArrangement,
         content = content
     )
@@ -104,11 +109,13 @@ fun AdaptiveTwoColumn(
             }
         }
     } else {
+        val bottomClearance = LocalFloatingNavigationClearance.current
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = adaptiveHorizontalPadding()),
+                .padding(horizontal = adaptiveHorizontalPadding())
+                .padding(bottom = bottomClearance),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             header?.invoke()
@@ -161,11 +168,13 @@ fun AdaptiveGutterLayout(
             }
         }
     } else {
+        val bottomClearance = LocalFloatingNavigationClearance.current
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = adaptiveHorizontalPadding()),
+                .padding(horizontal = adaptiveHorizontalPadding())
+                .padding(bottom = bottomClearance),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             header?.invoke()

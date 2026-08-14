@@ -63,6 +63,7 @@ fun SettingsScreen(
     onOpenAppearance: () -> Unit,
     onOpenNavigation: () -> Unit,
     onOpenProfile: () -> Unit,
+    onOpenNutritionGoals: () -> Unit,
     onOpenProgress: () -> Unit,
     onOpenCoaching: () -> Unit
 ) {
@@ -82,7 +83,8 @@ fun SettingsScreen(
             )
         }
         SectionCard(title = "Preferences") {
-            SettingsRow(Icons.Outlined.Person, "Health profile & goals", "Body metrics and nutrition targets", onOpenProfile)
+            SettingsRow(Icons.Outlined.Person, "Health profile", "Body metrics, activity, and training goal", onOpenProfile)
+            SettingsRow(Icons.Outlined.Restaurant, "Nutrition goals", "Calories, macros, fiber, and water", onOpenNutritionGoals)
             SettingsRow(Icons.AutoMirrored.Outlined.ShowChart, "Progress", "Nutrition, weight, and strength trends", onOpenProgress)
             SettingsRow(Icons.Outlined.Lightbulb, "Coaching tips", "Personalized recommendations", onOpenCoaching)
             SettingsRow(Icons.Outlined.Security, "Privacy & Data", "Photos, local data, and export", onOpenPrivacy)
@@ -201,15 +203,21 @@ fun N8nSettingsScreen(
 fun PrivacySettingsScreen(
     uiState: SettingsUiState,
     onBack: () -> Unit,
-    onTemporaryPhotosOnlyChange: (Boolean) -> Unit,
+    onMealPhotoAnalysisChange: (Boolean) -> Unit,
     onGenerateExport: () -> Unit
 ) {
     val context = LocalContext.current
     AdaptiveColumn {
         SettingsHeader("Privacy & Data", onBack)
         SectionCard(title = "Photo analysis") {
+            SwitchRow(
+                "Meal photo analysis",
+                "When enabled, capturing a meal immediately uploads the photo to your configured n8n endpoint for analysis.",
+                uiState.mealPhotoAnalysisEnabled,
+                onMealPhotoAnalysisChange
+            )
             SwitchRow("Temporary photos only", "Captured photos stay in temporary app storage and are removed after processing.", true, null)
-            Text("Meal photos are sent to your configured n8n endpoint only after you consent. Barcode lookup also contacts n8n when you request it.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("You can turn meal photo uploads off here at any time. Barcode lookup contacts n8n only when you request it.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         SectionCard(title = "Your data") {
             Text("Nutrition, workouts, profile, and weight history are stored locally and may be included in Android device backup. Sync sends those records to n8n only when enabled; scanner requests are sent when you explicitly run them.")
