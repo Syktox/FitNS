@@ -1,18 +1,18 @@
 name: Android Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version_name:
-        description: "Release version name"
-        required: false
-        type: string
   push:
     tags:
-      - "v*"
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+run-name: Build FitNS ${{ github.ref_name }}
 
 permissions:
   contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-release:
@@ -20,6 +20,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate and export version
+        shell: bash
+        run: |
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Tag must use the format vX.X.X, for example v0.0.1."
+            exit 1
+          fi
+
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+
+          if (( 10#$minor > 999 || 10#$patch > 999 )); then
+            echo "Minor and patch versions must be between 0 and 999."
+            exit 1
+          fi
+
+          version_code=$((10#$major * 1000000 + 10#$minor * 1000 + 10#$patch))
+
+          if (( version_code < 1 || version_code > 2100000000 )); then
+            echo "Calculated Android versionCode is outside the supported range."
+            exit 1
+          fi
+
+          echo "FITNS_VERSION_NAME=${major}.${minor}.${patch}" >> "${GITHUB_ENV}"
+          echo "FITNS_VERSION_CODE=${version_code}" >> "${GITHUB_ENV}"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -32,6 +59,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
       - name: Configure Android signing
         shell: bash
         run: |
@@ -42,13 +72,16 @@ jobs:
             echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}"
           } > .env.android-signing
 
+      - name: Run unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest --max-workers=1
+
       - name: Build APK and AAB
         run: ./gradlew --no-daemon assembleRelease bundleRelease --max-workers=1
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: fitns-release
+          name: fitns-${{ github.ref_name }}
           path: |
             app/build/outputs/apk/release/*.apk
             app/build/outputs/bundle/release/*.aab
@@ -59,6 +92,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: FitNS ${{ github.ref_name }}
+          generate_release_notes: true
           files: |
             app/build/outputs/apk/release/*.apk
             app/build/outputs/bundle/release/*.aab

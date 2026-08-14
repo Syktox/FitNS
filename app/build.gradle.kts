@@ -12,6 +12,14 @@ plugins {
 android {
     val androidSigningEnv = loadAndroidSigningEnv(rootProject.file(".env.android-signing"))
     val localProps = loadLocalProperties(rootProject.file("local.properties"))
+    val buildVersionName = System.getenv("FITNS_VERSION_NAME")
+        ?.removePrefix("v")
+        ?.takeIf { it.matches(Regex("\\d+\\.\\d+\\.\\d+")) }
+        ?: "0.0.1"
+    val buildVersionCode = System.getenv("FITNS_VERSION_CODE")
+        ?.toIntOrNull()
+        ?.takeIf { it > 0 }
+        ?: 1
 
     namespace = "com.raysix.fitns"
     compileSdk = 36
@@ -20,8 +28,8 @@ android {
         applicationId = "com.raysix.fitns"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = buildVersionCode
+        versionName = buildVersionName
 
         buildConfigField(
             "String",
