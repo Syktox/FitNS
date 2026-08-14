@@ -48,7 +48,8 @@ import kotlin.math.roundToInt
 fun BodyWeightScreen(
     uiState: BodyWeightUiState,
     onAddEntry: (Double, String) -> Unit,
-    onDeleteEntry: (BodyWeightLogEntry) -> Unit
+    onDeleteEntry: (BodyWeightLogEntry) -> Unit,
+    onBack: () -> Unit = {}
 ) {
     var weight by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
@@ -81,7 +82,8 @@ fun BodyWeightScreen(
         header = {
             ScreenHeader(
                 title = "Body Weight",
-                subtitle = "Trend evaluation uses a moving average."
+                subtitle = "Trend evaluation uses a moving average.",
+                actions = { TextButton(onClick = onBack) { Text("Back") } }
             )
         },
         gutter = {
@@ -107,8 +109,11 @@ fun BodyWeightScreen(
                     message = "Log your first weigh-in to start seeing a smoother trend."
                 )
             } else {
-                uiState.entries.forEach { entry ->
+                uiState.entries.take(50).forEach { entry ->
                     BodyWeightEntryCard(entry, onDelete = { pendingDelete = entry })
+                }
+                if (uiState.entries.size > 50) {
+                    Text("Showing the 50 most recent entries", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

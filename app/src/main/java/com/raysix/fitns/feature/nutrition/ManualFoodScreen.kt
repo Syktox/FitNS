@@ -19,6 +19,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -110,7 +111,8 @@ fun ManualFoodScreen(
         header = {
             ScreenHeader(
                 title = "Add Food",
-                subtitle = "Scan, photograph, or enter details for a food. Review every detail before saving."
+                subtitle = "Scan, photograph, or enter details for a food. Review every detail before saving.",
+                actions = { TextButton(onClick = onCancel) { Text("Close") } }
             )
         },
         gutterWidthFraction = 0.4f,

@@ -21,6 +21,25 @@ import com.raysix.fitns.domain.model.WorkoutLogEntry
 import com.raysix.fitns.domain.model.WorkoutPlan
 import kotlinx.coroutines.flow.Flow
 
+enum class AppearanceMode { System, Light, Dark }
+
+enum class BottomNavigationDestination {
+    Today,
+    Nutrition,
+    Workout,
+    Progress,
+    BodyWeight,
+    Coaching,
+    Profile,
+    Settings,
+    QuickAccess;
+
+    companion object {
+        val Default = listOf(Today, Nutrition, Workout, QuickAccess)
+        const val MaxSelected = 4
+    }
+}
+
 interface NutritionRepository {
     fun observeToday(): Flow<DailyNutritionDashboard>
     fun observeFoodHistory(): Flow<List<FoodLogEntry>>
@@ -38,6 +57,7 @@ interface NutritionRepository {
     suspend fun logSavedMeal(meal: SavedMeal, scaleFactor: Double, mealType: com.raysix.fitns.domain.model.MealType): AppResult<Unit>
     suspend fun copyEntries(entries: List<FoodLogEntry>, mealType: com.raysix.fitns.domain.model.MealType? = null): AppResult<Unit>
     suspend fun addWater(milliliters: Double): AppResult<Unit>
+    suspend fun removeWater(milliliters: Double): AppResult<Unit>
     suspend fun deleteFood(entry: FoodLogEntry): AppResult<Unit>
 }
 
@@ -86,12 +106,16 @@ interface SettingsRepository {
     fun observeTemporaryPhotosOnly(): Flow<Boolean>
     fun observeOnboardingCompleted(): Flow<Boolean>
     fun observeGoogleAccount(): Flow<GoogleAccount?>
+    fun observeAppearanceMode(): Flow<AppearanceMode>
+    fun observeBottomNavigation(): Flow<List<BottomNavigationDestination>>
     suspend fun updateN8nBaseUrl(baseUrl: String)
     suspend fun updateSyncEnabled(enabled: Boolean)
     suspend fun updateTemporaryPhotosOnly(enabled: Boolean)
     suspend fun completeOnboarding()
     suspend fun saveGoogleAccount(account: GoogleAccount)
     suspend fun clearGoogleAccount()
+    suspend fun updateAppearanceMode(mode: AppearanceMode)
+    suspend fun updateBottomNavigation(destinations: List<BottomNavigationDestination>)
     suspend fun setBearerToken(token: String)
     suspend fun readBearerToken(): String?
     suspend fun clearBearerToken()

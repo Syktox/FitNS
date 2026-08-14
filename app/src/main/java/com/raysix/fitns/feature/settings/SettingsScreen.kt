@@ -1,200 +1,401 @@
 package com.raysix.fitns.feature.settings
 
-import androidx.compose.foundation.background
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.CloudSync
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DashboardCustomize
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.MonitorWeight
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.raysix.fitns.core.design.AdaptiveTwoColumn
-import com.raysix.fitns.core.design.ModernCard
-import com.raysix.fitns.core.design.ScreenHeader
+import androidx.core.content.FileProvider
+import com.raysix.fitns.core.design.AdaptiveColumn
+import com.raysix.fitns.core.design.ErrorBanner
 import com.raysix.fitns.core.design.SectionCard
+import com.raysix.fitns.domain.repository.AppearanceMode
+import com.raysix.fitns.domain.repository.BottomNavigationDestination
+import java.io.File
 
 @Composable
 fun SettingsScreen(
     uiState: SettingsUiState,
-    onN8nBaseUrlChange: (String) -> Unit,
+    onBack: () -> Unit,
+    onOpenAccount: () -> Unit,
+    onOpenN8n: () -> Unit,
+    onOpenPrivacy: () -> Unit,
+    onOpenAppearance: () -> Unit,
+    onOpenNavigation: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenProgress: () -> Unit,
+    onOpenCoaching: () -> Unit
+) {
+    AdaptiveColumn {
+        SettingsHeader("Settings", onBack)
+        SectionCard(title = "Your FitNS") {
+            SettingsRow(Icons.Outlined.Person, "Account", uiState.googleAccount?.let { it.displayName.ifBlank { it.email } } ?: "Not signed in", onOpenAccount)
+            SettingsRow(
+                Icons.Outlined.CloudSync,
+                "n8n & Sync",
+                when {
+                    !uiState.bearerTokenConfigured -> "Not connected"
+                    uiState.n8nSettings.syncEnabled -> "Configured · Sync enabled"
+                    else -> "Configured · Sync off"
+                },
+                onOpenN8n
+            )
+        }
+        SectionCard(title = "Preferences") {
+            SettingsRow(Icons.Outlined.Person, "Health profile & goals", "Body metrics and nutrition targets", onOpenProfile)
+            SettingsRow(Icons.AutoMirrored.Outlined.ShowChart, "Progress", "Nutrition, weight, and strength trends", onOpenProgress)
+            SettingsRow(Icons.Outlined.Lightbulb, "Coaching tips", "Personalized recommendations", onOpenCoaching)
+            SettingsRow(Icons.Outlined.Security, "Privacy & Data", "Photos, local data, and export", onOpenPrivacy)
+            SettingsRow(Icons.Outlined.DarkMode, "Appearance", uiState.appearanceMode.name, onOpenAppearance)
+            SettingsRow(
+                Icons.Outlined.DashboardCustomize,
+                "Bottom navigation",
+                uiState.bottomNavigation.joinToString(" · ") { it.displayName },
+                onOpenNavigation
+            )
+        }
+        Text(
+            "FitNS stores health and training data locally. Scanner requests and optional sync use your configured n8n endpoint; Android may include local data in device backup.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+    }
+}
+
+@Composable
+fun AccountSettingsScreen(
+    uiState: SettingsUiState,
+    onBack: () -> Unit,
+    onCreateSignInIntent: () -> Intent?,
+    onSignInResult: (Intent?) -> Boolean,
+    onSignOut: () -> Unit
+) {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result -> onSignInResult(result.data) }
+    AdaptiveColumn {
+        SettingsHeader("Account", onBack)
+        SectionCard(title = if (uiState.googleAccount == null) "Google account" else "Signed in") {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(56.dp)) {
+                    Text(
+                        text = uiState.googleAccount?.displayName?.firstOrNull()?.uppercase() ?: "F",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(uiState.googleAccount?.displayName?.ifBlank { "Google account" } ?: "Not signed in", fontWeight = FontWeight.SemiBold)
+                    Text(uiState.googleAccount?.email ?: "Sign in to connect your identity to FitNS.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (uiState.googleAccount == null) {
+                Button(
+                    onClick = { onCreateSignInIntent()?.let(launcher::launch) },
+                    enabled = uiState.googleSignInConfigured,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (uiState.googleSignInConfigured) "Continue with Google" else "Google sign-in not configured") }
+            } else {
+                OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) { Text("Sign out") }
+            }
+        }
+        Text("Signing out does not delete your local nutrition or workout data.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+fun N8nSettingsScreen(
+    uiState: SettingsUiState,
+    onBack: () -> Unit,
+    onBaseUrlChange: (String) -> Unit,
+    onSaveBaseUrl: () -> Unit,
     onBearerTokenChange: (String) -> Unit,
     onSaveBearerToken: () -> Unit,
     onSyncEnabledChange: (Boolean) -> Unit,
-    onTemporaryPhotosOnlyChange: (Boolean) -> Unit,
     onTestConnection: () -> Unit,
-    onRetrySyncNow: () -> Unit,
+    onSyncNow: () -> Unit
+) {
+    AdaptiveColumn {
+        SettingsHeader("n8n & Sync", onBack)
+        SectionCard(title = "Connection", subtitle = if (uiState.bearerTokenConfigured) "Credentials configured" else "Setup required") {
+            OutlinedTextField(
+                value = uiState.n8nSettings.baseUrl,
+                onValueChange = onBaseUrlChange,
+                label = { Text("Base URL") },
+                supportingText = { Text("HTTPS endpoints only") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedButton(onClick = onSaveBaseUrl, modifier = Modifier.fillMaxWidth()) { Text("Save address") }
+            OutlinedTextField(
+                value = uiState.bearerTokenInput,
+                onValueChange = onBearerTokenChange,
+                label = { Text(if (uiState.bearerTokenConfigured) "Replace bearer token" else "Bearer token") },
+                supportingText = { Text(if (uiState.bearerTokenConfigured) "A token is encrypted on this device. Its value is never shown." else "Stored encrypted on this device") },
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedButton(onClick = onSaveBearerToken, modifier = Modifier.fillMaxWidth()) { Text(if (uiState.bearerTokenConfigured) "Update token" else "Save token") }
+            Button(onClick = onTestConnection, enabled = !uiState.testingConnection, modifier = Modifier.fillMaxWidth()) {
+                Text(if (uiState.testingConnection) "Testing…" else "Test connection")
+            }
+            val isError = listOf("failed", "error", "invalid", "unreachable", "timed out").any { uiState.connectionStatus.contains(it, true) }
+            if (isError) ErrorBanner(uiState.connectionStatus) else Text(uiState.connectionStatus, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        SectionCard(title = "Sync") {
+            SwitchRow("Enable sync", "Queue local changes for your n8n workflows.", uiState.n8nSettings.syncEnabled, onSyncEnabledChange)
+            Text("${uiState.pendingSyncCount} pending item${if (uiState.pendingSyncCount == 1) "" else "s"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (uiState.failedSyncCount > 0) {
+                ErrorBanner(
+                    "${uiState.failedSyncCount} item${if (uiState.failedSyncCount == 1) "" else "s"} need attention. " +
+                        (uiState.latestSyncError ?: "Check the connection and credentials, then retry.")
+                )
+            }
+            OutlinedButton(onClick = onSyncNow, enabled = uiState.n8nSettings.syncEnabled, modifier = Modifier.fillMaxWidth()) { Text("Sync now") }
+        }
+    }
+}
+
+@Composable
+fun PrivacySettingsScreen(
+    uiState: SettingsUiState,
+    onBack: () -> Unit,
+    onTemporaryPhotosOnlyChange: (Boolean) -> Unit,
     onGenerateExport: () -> Unit
 ) {
-    AdaptiveTwoColumn(
-        header = {
-            ScreenHeader(
-                title = "Settings",
-                subtitle = "Sync, privacy, and local export controls."
-            )
-        },
-        main = {
-            SectionCard(
-                title = "n8n Connection",
-                trailing = {
-                    StatusPill(uiState.connectionStatus)
-                }
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = uiState.n8nSettings.baseUrl,
-                        onValueChange = onN8nBaseUrlChange,
-                        label = { Text("Base URL") },
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = uiState.bearerTokenInput,
-                        onValueChange = onBearerTokenChange,
-                        label = { Text(if (uiState.bearerTokenConfigured) "Replace bearer token" else "Bearer token") },
-                        supportingText = { Text(if (uiState.bearerTokenConfigured) "A token is stored securely on this device." else "Required by the protected n8n webhooks.") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Surface(
-                        onClick = onSaveBearerToken,
-                        shape = RoundedCornerShape(999.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            if (uiState.bearerTokenConfigured) "Update token" else "Save token",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(vertical = 12.dp)
-                        )
-                    }
-                    Surface(
-                        onClick = onTestConnection,
-                        enabled = !uiState.testingConnection,
-                        shape = RoundedCornerShape(999.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            if (uiState.testingConnection) "Testing..." else "Test connection",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(vertical = 12.dp)
-                        )
-                    }
-                    SettingRow(
-                        label = "Enable sync",
-                        supportingText = "Queue local changes for n8n when enabled.",
-                        checked = uiState.n8nSettings.syncEnabled,
-                        onCheckedChange = onSyncEnabledChange
-                    )
-                    Text("Pending sync items: ${uiState.pendingSyncCount}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Surface(
-                        onClick = onRetrySyncNow,
-                        enabled = uiState.n8nSettings.syncEnabled && uiState.pendingSyncCount > 0,
-                        shape = RoundedCornerShape(999.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "Sync now",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(vertical = 12.dp)
-                        )
-                    }
-                }
+    val context = LocalContext.current
+    AdaptiveColumn {
+        SettingsHeader("Privacy & Data", onBack)
+        SectionCard(title = "Photo analysis") {
+            SwitchRow("Temporary photos only", "Captured photos stay in temporary app storage and are removed after processing.", true, null)
+            Text("Meal photos are sent to your configured n8n endpoint only after you consent. Barcode lookup also contacts n8n when you request it.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        SectionCard(title = "Your data") {
+            Text("Nutrition, workouts, profile, and weight history are stored locally and may be included in Android device backup. Sync sends those records to n8n only when enabled; scanner requests are sent when you explicitly run them.")
+            Button(onClick = onGenerateExport, modifier = Modifier.fillMaxWidth()) { Text("Prepare JSON export") }
+            uiState.exportStatus?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+            uiState.exportFilePath?.let { path ->
+                OutlinedButton(
+                    onClick = {
+                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", File(path))
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                            type = "application/json"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }, "Share FitNS export"))
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Share export") }
             }
-        },
-        side = {
-            SectionCard(title = "Privacy") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SettingRow(
-                        label = "Store photos temporarily only",
-                        supportingText = "Photo analysis should not persist raw images longer than needed.",
-                        checked = uiState.temporaryPhotosOnly,
-                        onCheckedChange = onTemporaryPhotosOnlyChange
-                    )
-                    Text("Photo uploads require explicit consent for each analysis.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Surface(
-                        onClick = onGenerateExport,
-                        shape = RoundedCornerShape(999.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "Prepare JSON export",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(vertical = 12.dp)
-                        )
-                    }
-                    uiState.exportStatus?.let { status ->
-                        Text(status, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
-                    }
-                    uiState.exportPreview?.let { preview ->
-                        ModernCard(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurface) {
-                            Text(
-                                text = preview,
-                                style = MaterialTheme.typography.bodySmall
-                            )
+        }
+    }
+}
+
+@Composable
+fun AppearanceSettingsScreen(uiState: SettingsUiState, onBack: () -> Unit, onModeChange: (AppearanceMode) -> Unit) {
+    AdaptiveColumn {
+        SettingsHeader("Appearance", onBack)
+        SectionCard(title = "Theme") {
+            AppearanceMode.entries.forEach { mode ->
+                Surface(onClick = { onModeChange(mode) }, color = MaterialTheme.colorScheme.surface) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = uiState.appearanceMode == mode, onClick = null)
+                        Column(Modifier.padding(start = 8.dp)) {
+                            Text(mode.name, fontWeight = FontWeight.SemiBold)
+                            if (mode == AppearanceMode.System) Text("Match your device setting", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
             }
         }
-    )
+    }
 }
 
 @Composable
-private fun SettingRow(label: String, supportingText: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(label, fontWeight = FontWeight.SemiBold)
-            Text(supportingText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+fun NavigationSettingsScreen(
+    uiState: SettingsUiState,
+    onBack: () -> Unit,
+    onSelectionChange: (BottomNavigationDestination, Boolean) -> Unit,
+    onReset: () -> Unit
+) {
+    AdaptiveColumn {
+        SettingsHeader("Bottom navigation", onBack)
+        SectionCard(
+            title = "Choose your buttons",
+            subtitle = "Select up to ${BottomNavigationDestination.MaxSelected}. Only your choices appear in the bar."
+        ) {
+            BottomNavigationDestination.entries.forEach { destination ->
+                val selected = destination in uiState.bottomNavigation
+                val selectedPosition = uiState.bottomNavigation.indexOf(destination)
+                val enabled = if (selected) {
+                    uiState.bottomNavigation.size > 1
+                } else {
+                    uiState.bottomNavigation.size < BottomNavigationDestination.MaxSelected
+                }
+                NavigationDestinationRow(
+                    destination = destination,
+                    selected = selected,
+                    position = selectedPosition.takeIf { it >= 0 },
+                    enabled = enabled,
+                    onSelectionChange = { onSelectionChange(destination, it) }
+                )
+            }
+            OutlinedButton(onClick = onReset, modifier = Modifier.fillMaxWidth()) {
+                Text("Reset to default buttons")
+            }
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Text(
+            "Buttons appear in the order you select them. Remove and select a button again to move it to the end.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
     }
 }
 
 @Composable
-private fun StatusPill(status: String) {
-    val color = when {
-        status.contains("successful", ignoreCase = true) -> MaterialTheme.colorScheme.primary
-        status.contains("testing", ignoreCase = true) -> MaterialTheme.colorScheme.secondary
-        status.contains("not tested", ignoreCase = true) -> MaterialTheme.colorScheme.onSurfaceVariant
-        else -> MaterialTheme.colorScheme.error
-    }
-    Box(
-        modifier = Modifier
-            .background(color.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp)
+private fun NavigationDestinationRow(
+    destination: BottomNavigationDestination,
+    selected: Boolean,
+    position: Int?,
+    enabled: Boolean,
+    onSelectionChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(status, color = color, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+        Icon(
+            imageVector = destination.icon,
+            contentDescription = null,
+            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Column(Modifier.weight(1f)) {
+            Text(destination.displayName, fontWeight = FontWeight.SemiBold)
+            Text(
+                position?.let { "Button ${it + 1}" } ?: destination.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(
+            checked = selected,
+            onCheckedChange = onSelectionChange,
+            enabled = enabled
+        )
+    }
+}
+
+private val BottomNavigationDestination.displayName: String
+    get() = when (this) {
+        BottomNavigationDestination.Today -> "Today"
+        BottomNavigationDestination.Nutrition -> "Nutrition"
+        BottomNavigationDestination.Workout -> "Workout"
+        BottomNavigationDestination.Progress -> "Progress"
+        BottomNavigationDestination.BodyWeight -> "Weight"
+        BottomNavigationDestination.Coaching -> "Coaching"
+        BottomNavigationDestination.Profile -> "Profile"
+        BottomNavigationDestination.Settings -> "Settings"
+        BottomNavigationDestination.QuickAccess -> "Quick access"
+    }
+
+private val BottomNavigationDestination.description: String
+    get() = when (this) {
+        BottomNavigationDestination.Today -> "Daily overview and hydration"
+        BottomNavigationDestination.Nutrition -> "Meals and nutrition targets"
+        BottomNavigationDestination.Workout -> "Start and manage workouts"
+        BottomNavigationDestination.Progress -> "Nutrition, weight, and strength trends"
+        BottomNavigationDestination.BodyWeight -> "Log and review body weight"
+        BottomNavigationDestination.Coaching -> "Personalized recommendations"
+        BottomNavigationDestination.Profile -> "Health profile and goals"
+        BottomNavigationDestination.Settings -> "App preferences and connections"
+        BottomNavigationDestination.QuickAccess -> "Open any area or logging tool"
+    }
+
+private val BottomNavigationDestination.icon: ImageVector
+    get() = when (this) {
+        BottomNavigationDestination.Today -> Icons.Outlined.Home
+        BottomNavigationDestination.Nutrition -> Icons.Outlined.Restaurant
+        BottomNavigationDestination.Workout -> Icons.Outlined.FitnessCenter
+        BottomNavigationDestination.Progress -> Icons.AutoMirrored.Outlined.ShowChart
+        BottomNavigationDestination.BodyWeight -> Icons.Outlined.MonitorWeight
+        BottomNavigationDestination.Coaching -> Icons.Outlined.Lightbulb
+        BottomNavigationDestination.Profile -> Icons.Outlined.Person
+        BottomNavigationDestination.Settings -> Icons.Outlined.Settings
+        BottomNavigationDestination.QuickAccess -> Icons.Outlined.Apps
+    }
+
+@Composable
+private fun SettingsHeader(title: String, onBack: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
+        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun SettingsRow(icon: ImageVector, title: String, summary: String, onClick: () -> Unit) {
+    Surface(onClick = onClick, shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold)
+                Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = "Open $title", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, summary: String, checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = onCheckedChange != null)
     }
 }

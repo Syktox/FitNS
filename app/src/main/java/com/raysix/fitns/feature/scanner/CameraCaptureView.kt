@@ -38,7 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -49,6 +49,10 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun CameraCaptureView(
@@ -59,9 +63,14 @@ fun CameraCaptureView(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
     val executor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
+    var boundProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     DisposableEffect(Unit) {
-        onDispose { executor.shutdown() }
+        onDispose {
+            boundProvider?.unbindAll()
+            executor.shutdown()
+        }
     }
 
     var hasCameraPermission by remember {
@@ -88,23 +97,26 @@ fun CameraCaptureView(
 
     LaunchedEffect(hasCameraPermission) {
         if (!hasCameraPermission) return@LaunchedEffect
-        val provider = cameraProvider(context)
+        val provider = runCatching { cameraProvider(context) }.getOrNull() ?: return@LaunchedEffect
         val preview = Preview.Builder().build().also {
             it.setSurfaceProvider(previewView.surfaceProvider)
         }
         provider.unbindAll()
-        provider.bindToLifecycle(
-            lifecycleOwner,
-            CameraSelector.DEFAULT_BACK_CAMERA,
-            preview,
-            imageCapture
-        )
+        runCatching {
+            provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture)
+            boundProvider = provider
+        }
     }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let { onImageBytes(context.readBytesFromUri(it)) }
+        uri?.let {
+            scope.launch {
+                val bytes = withContext(Dispatchers.IO) { context.readBytesFromUri(it) }
+                if (bytes.isNotEmpty()) onImageBytes(bytes)
+            }
+        }
     }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -198,8 +210,22 @@ private fun captureImage(
 
 private fun Context.readBytesFromUri(uri: Uri): ByteArray {
     val stream = contentResolver.openInputStream(uri) ?: return ByteArray(0)
-    return stream.use { it.readBytes() }
+    return stream.use { input ->
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            if (total > MaxInputBytes) return ByteArray(0)
+            output.write(buffer, 0, count)
+        }
+        output.toByteArray()
+    }
 }
+
+private const val MaxInputBytes = 20 * 1024 * 1024
 
 private suspend fun cameraProvider(context: Context): ProcessCameraProvider {
     return suspendCancellableCoroutine { continuation ->

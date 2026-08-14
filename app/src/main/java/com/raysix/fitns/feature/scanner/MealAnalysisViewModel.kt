@@ -71,7 +71,7 @@ class MealAnalysisViewModel @Inject constructor(
     fun onImageCaptured(bytes: ByteArray) {
         viewModelScope.launch {
             val bitmap = withContext(Dispatchers.Default) { decodeScaled(bytes) } ?: return@launch
-            pendingBase64 = compressToBase64(bitmap)
+            pendingBase64 = withContext(Dispatchers.Default) { compressToBase64(bitmap) }
             state.value = state.value.copy(
                 previewBitmap = bitmap.asImageBitmap(),
                 errorMessage = null,

@@ -60,7 +60,8 @@ fun AdaptiveColumn(
 /**
  * Splits the main content into two weighted columns on wide screens.
  * The [header] spans the full width above the columns. On compact screens
- * only [main] is shown full-width (side content is ignored).
+ * both panes are rendered in reading order so secondary functionality never
+ * disappears because of the available width.
  */
 @Composable
 fun AdaptiveTwoColumn(
@@ -112,6 +113,7 @@ fun AdaptiveTwoColumn(
         ) {
             header?.invoke()
             main()
+            side()
         }
     }
 }

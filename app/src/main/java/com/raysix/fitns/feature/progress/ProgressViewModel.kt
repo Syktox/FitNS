@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.Dispatchers
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -71,12 +73,13 @@ data class MuscleGroupVolumeAnalytics(
 
 data class NutritionAnalyticsWindow(
     val days: Int,
+    val loggedDays: Int,
     val averageCalories: Double,
     val averageProtein: Double,
     val averageCarbs: Double,
     val averageFat: Double,
     val averageFiber: Double,
-    val goalAdherencePercent: Double
+    val calorieGoal: Double
 )
 
 @HiltViewModel
@@ -115,7 +118,7 @@ class ProgressViewModel @Inject constructor(
                 calorieGoal = nutritionGoal.caloriesKcal
             )
         )
-    }.stateIn(
+    }.flowOn(Dispatchers.Default).stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = ProgressUiState()
@@ -144,7 +147,8 @@ class ProgressViewModel @Inject constructor(
     private fun List<BodyWeightLogEntry>.toBodyWeightMovingAverage(): List<TrendPoint> {
         val chronological = sortedBy { it.measuredAt }
         return chronological.mapIndexed { index, entry ->
-            val window = chronological.drop((index - 6).coerceAtLeast(0)).take(index + 1)
+            val startIndex = (index - 6).coerceAtLeast(0)
+            val window = chronological.subList(startIndex, index + 1)
             TrendPoint(
                 label = entry.measuredAt.toLocalDate().format(DayLabelFormatter),
                 value = window.map { it.weightKg }.average()
@@ -242,23 +246,30 @@ class ProgressViewModel @Inject constructor(
     }
 
     private fun List<FoodLogEntry>.toNutritionAnalytics(calorieGoal: Double): List<NutritionAnalyticsWindow> {
-        return listOf(7, 30, 90).map { days ->
-            val cutoff = LocalDate.now(ZoneId.systemDefault()).minusDays(days.toLong() - 1)
-            val entries = filter { it.consumedAt.toLocalDate() >= cutoff }
-            val dayCount = days.toDouble()
+        val today = LocalDate.now(ZoneId.systemDefault())
+        return listOf(7, 30, 90).mapNotNull { days ->
+            val cutoff = today.minusDays(days.toLong() - 1)
+            val entries = filter {
+                val entryDate = it.consumedAt.toLocalDate()
+                entryDate in cutoff..today
+            }
+            if (entries.isEmpty()) return@mapNotNull null
+
+            val loggedDays = entries
+                .map { it.consumedAt.toLocalDate() }
+                .distinct()
+                .size
+            val dayCount = loggedDays.toDouble()
             val calories = entries.sumOf { it.nutrition.caloriesKcal } / dayCount
             NutritionAnalyticsWindow(
                 days = days,
+                loggedDays = loggedDays,
                 averageCalories = calories,
                 averageProtein = entries.sumOf { it.nutrition.proteinGrams } / dayCount,
                 averageCarbs = entries.sumOf { it.nutrition.carbohydratesGrams } / dayCount,
                 averageFat = entries.sumOf { it.nutrition.fatGrams } / dayCount,
                 averageFiber = entries.sumOf { it.nutrition.fiberGrams } / dayCount,
-                goalAdherencePercent = if (calorieGoal > 0.0) {
-                    (1.0 - kotlin.math.abs(calories - calorieGoal) / calorieGoal).coerceIn(0.0, 1.0) * 100.0
-                } else {
-                    0.0
-                }
+                calorieGoal = calorieGoal
             )
         }
     }

@@ -4,17 +4,22 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Home
@@ -35,6 +40,13 @@ import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -72,10 +84,16 @@ import com.raysix.fitns.feature.scanner.LabelScanScreen
 import com.raysix.fitns.feature.scanner.MealAnalysisScreen
 import com.raysix.fitns.feature.settings.SettingsScreen
 import com.raysix.fitns.feature.settings.SettingsViewModel
+import com.raysix.fitns.feature.settings.AccountSettingsScreen
+import com.raysix.fitns.feature.settings.N8nSettingsScreen
+import com.raysix.fitns.feature.settings.NavigationSettingsScreen
+import com.raysix.fitns.feature.settings.PrivacySettingsScreen
+import com.raysix.fitns.feature.settings.AppearanceSettingsScreen
 import com.raysix.fitns.feature.workout.ActiveWorkoutScreen
 import com.raysix.fitns.feature.workout.WorkoutHistoryScreen
 import com.raysix.fitns.feature.workout.WorkoutStartScreen
 import com.raysix.fitns.feature.workout.WorkoutViewModel
+import com.raysix.fitns.domain.repository.BottomNavigationDestination
 
 private enum class Route(
     val value: String,
@@ -94,27 +112,48 @@ private enum class Route(
     ActiveWorkout("active-workout", "Active", Icons.Outlined.FitnessCenter, Icons.Filled.FitnessCenter),
     BodyWeight("bodyweight", "Weight", Icons.Outlined.MonitorWeight, Icons.Outlined.MonitorWeight),
     Progress("progress", "Progress", Icons.AutoMirrored.Outlined.ShowChart, Icons.AutoMirrored.Filled.ShowChart),
-    Recommendations("recommendations", "Tips", Icons.Outlined.Lightbulb, Icons.Outlined.Lightbulb),
+    Recommendations("recommendations", "Coach", Icons.Outlined.Lightbulb, Icons.Outlined.Lightbulb),
     History("history", "History", Icons.Outlined.FitnessCenter, Icons.Filled.FitnessCenter),
     Profile("profile", "Profile", Icons.Outlined.Person, Icons.Filled.Person),
-    Settings("settings", "Settings", Icons.Outlined.Settings, Icons.Outlined.Settings)
+    Settings("settings", "Settings", Icons.Outlined.Settings, Icons.Outlined.Settings),
+    Account("settings/account", "Account", Icons.Outlined.Person, Icons.Filled.Person),
+    N8nSettings("settings/n8n", "n8n & Sync", Icons.Outlined.Settings, Icons.Outlined.Settings),
+    PrivacySettings("settings/privacy", "Privacy & Data", Icons.Outlined.Settings, Icons.Outlined.Settings),
+    AppearanceSettings("settings/appearance", "Appearance", Icons.Outlined.Settings, Icons.Outlined.Settings),
+    NavigationSettings("settings/navigation", "Bottom navigation", Icons.Outlined.Settings, Icons.Outlined.Settings),
+    QuickAccess("quick-access", "Quick", Icons.Outlined.Apps, Icons.Filled.Apps)
 }
 
 @Composable
 fun FitNsApp() {
     val navController = rememberNavController()
-    val bottomRoutes = listOf(Route.Dashboard, Route.Nutrition, Route.Workout, Route.Progress, Route.Profile)
+    val primaryNavigationViewModel: PrimaryNavigationViewModel = hiltViewModel()
+    val selectedDestinations = primaryNavigationViewModel.destinations.collectAsStateWithLifecycle().value
+    val bottomRoutes = remember(selectedDestinations) { selectedDestinations.map { it.toRoute() } }
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
-    val onOnboarding = currentDestination?.route == Route.Onboarding.value
+    val showPrimaryNavigation = currentDestination?.route == Route.Dashboard.value ||
+        currentDestination?.route in bottomRoutes.map { it.value }
+    var showQuickActions by rememberSaveable { mutableStateOf(false) }
+
+    if (showQuickActions) {
+        QuickActionsSheet(
+            onDismiss = { showQuickActions = false },
+            onNavigate = { route ->
+                showQuickActions = false
+                navigateFromQuickAccess(navController, route)
+            }
+        )
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            if (!onOnboarding && isCompactScreen()) {
+            if (showPrimaryNavigation && isCompactScreen()) {
                 PillNavigationBar(
                     currentDestination = currentDestination,
                     bottomRoutes = bottomRoutes,
-                    navController = navController
+                    navController = navController,
+                    onQuickAction = { showQuickActions = true }
                 )
             }
         }
@@ -124,11 +163,12 @@ fun FitNsApp() {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (!onOnboarding && isWideScreen()) {
-                SideRail(
+            if (showPrimaryNavigation && isWideScreen()) {
+                    SideRail(
                     currentDestination = currentDestination,
                     bottomRoutes = bottomRoutes,
-                    navController = navController
+                    navController = navController,
+                    onQuickAction = { showQuickActions = true }
                 )
             }
             NavHost(
@@ -159,7 +199,9 @@ fun FitNsApp() {
                         message = uiState.message,
                         onAddFood = { navController.navigate(Route.AddFood.value) },
                         onStartWorkout = { navController.navigate(Route.Workout.value) },
-                        onAddWater = viewModel::addWater
+                        onAddWater = viewModel::addWater,
+                        onRemoveWater = viewModel::removeWater,
+                        onOpenSettings = { navController.navigate(Route.Settings.value) }
                     )
                 }
                 composable(Route.Nutrition.value) {
@@ -292,7 +334,8 @@ fun FitNsApp() {
                     WorkoutHistoryScreen(
                         history = uiState.history,
                         progressionHint = viewModel::progressionHint,
-                        onDeleteWorkout = viewModel::deleteWorkout
+                        onDeleteWorkout = viewModel::deleteWorkout,
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 composable(Route.BodyWeight.value) {
@@ -301,18 +344,19 @@ fun FitNsApp() {
                     BodyWeightScreen(
                         uiState = uiState,
                         onAddEntry = viewModel::addEntry,
-                        onDeleteEntry = viewModel::deleteEntry
+                        onDeleteEntry = viewModel::deleteEntry,
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 composable(Route.Progress.value) {
                     val viewModel: ProgressViewModel = hiltViewModel()
                     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
-                    ProgressScreen(uiState = uiState)
+                    ProgressScreen(uiState = uiState, onBack = { navController.popBackStack() })
                 }
                 composable(Route.Recommendations.value) {
                     val viewModel: RecommendationsViewModel = hiltViewModel()
                     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
-                    RecommendationsScreen(uiState = uiState)
+                    RecommendationsScreen(uiState = uiState, onBack = { navController.popBackStack() })
                 }
                 composable(Route.Profile.value) {
                     val viewModel: ProfileViewModel = hiltViewModel()
@@ -322,7 +366,8 @@ fun FitNsApp() {
                         onSave = viewModel::save,
                         onOpenWeight = { navController.navigate(Route.BodyWeight.value) },
                         onOpenTips = { navController.navigate(Route.Recommendations.value) },
-                        onOpenSettings = { navController.navigate(Route.Settings.value) }
+                        onOpenSettings = { navController.navigate(Route.Settings.value) },
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 composable(Route.Settings.value) {
@@ -330,14 +375,70 @@ fun FitNsApp() {
                     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
                     SettingsScreen(
                         uiState = uiState,
-                        onN8nBaseUrlChange = viewModel::updateN8nBaseUrl,
+                        onBack = { navController.popBackStack() },
+                        onOpenAccount = { navController.navigate(Route.Account.value) },
+                        onOpenN8n = { navController.navigate(Route.N8nSettings.value) },
+                        onOpenPrivacy = { navController.navigate(Route.PrivacySettings.value) },
+                        onOpenAppearance = { navController.navigate(Route.AppearanceSettings.value) },
+                        onOpenNavigation = { navController.navigate(Route.NavigationSettings.value) },
+                        onOpenProfile = { navController.navigate(Route.Profile.value) },
+                        onOpenProgress = { navController.navigate(Route.Progress.value) },
+                        onOpenCoaching = { navController.navigate(Route.Recommendations.value) }
+                    )
+                }
+                composable(Route.Account.value) {
+                    val viewModel: SettingsViewModel = hiltViewModel()
+                    val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+                    AccountSettingsScreen(
+                        uiState = uiState,
+                        onBack = { navController.popBackStack() },
+                        onCreateSignInIntent = viewModel::createSignInIntent,
+                        onSignInResult = viewModel::handleSignInResult,
+                        onSignOut = viewModel::signOut
+                    )
+                }
+                composable(Route.N8nSettings.value) {
+                    val viewModel: SettingsViewModel = hiltViewModel()
+                    val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+                    N8nSettingsScreen(
+                        uiState = uiState,
+                        onBack = { navController.popBackStack() },
+                        onBaseUrlChange = viewModel::updateN8nBaseUrl,
+                        onSaveBaseUrl = viewModel::saveN8nBaseUrl,
                         onBearerTokenChange = viewModel::updateBearerToken,
                         onSaveBearerToken = viewModel::saveBearerToken,
                         onSyncEnabledChange = viewModel::updateSyncEnabled,
-                        onTemporaryPhotosOnlyChange = viewModel::updateTemporaryPhotosOnly,
                         onTestConnection = viewModel::testConnection,
-                        onRetrySyncNow = viewModel::retrySyncNow,
+                        onSyncNow = viewModel::retrySyncNow
+                    )
+                }
+                composable(Route.PrivacySettings.value) {
+                    val viewModel: SettingsViewModel = hiltViewModel()
+                    val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+                    PrivacySettingsScreen(
+                        uiState = uiState,
+                        onBack = { navController.popBackStack() },
+                        onTemporaryPhotosOnlyChange = viewModel::updateTemporaryPhotosOnly,
                         onGenerateExport = viewModel::generateLocalJsonExport
+                    )
+                }
+                composable(Route.AppearanceSettings.value) {
+                    val viewModel: SettingsViewModel = hiltViewModel()
+                    val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+                    AppearanceSettingsScreen(
+                        uiState = uiState,
+                        onBack = { navController.popBackStack() },
+                        onModeChange = viewModel::updateAppearanceMode
+                    )
+                }
+                composable(Route.NavigationSettings.value) {
+                    val viewModel: SettingsViewModel = hiltViewModel()
+                    val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+                    NavigationSettingsScreen(
+                        uiState = uiState,
+                        onBack = { navController.popBackStack() },
+                        onSelectionChange = viewModel::updateBottomNavigation,
+                        onReset = viewModel::resetBottomNavigation
                     )
                 }
             }
@@ -345,11 +446,24 @@ fun FitNsApp() {
     }
 }
 
+private fun BottomNavigationDestination.toRoute(): Route = when (this) {
+    BottomNavigationDestination.Today -> Route.Dashboard
+    BottomNavigationDestination.Nutrition -> Route.Nutrition
+    BottomNavigationDestination.Workout -> Route.Workout
+    BottomNavigationDestination.Progress -> Route.Progress
+    BottomNavigationDestination.BodyWeight -> Route.BodyWeight
+    BottomNavigationDestination.Coaching -> Route.Recommendations
+    BottomNavigationDestination.Profile -> Route.Profile
+    BottomNavigationDestination.Settings -> Route.Settings
+    BottomNavigationDestination.QuickAccess -> Route.QuickAccess
+}
+
 @Composable
 private fun PillNavigationBar(
     currentDestination: NavDestination?,
     bottomRoutes: List<Route>,
-    navController: NavHostController
+    navController: NavHostController,
+    onQuickAction: () -> Unit
 ) {
     Box(
         Modifier
@@ -369,10 +483,12 @@ private fun PillNavigationBar(
                 bottomRoutes.forEach { route ->
                     val selected = currentDestination?.hierarchy?.any { destination ->
                         destination.route == route.value
-                    } == true
+                    } == true && route != Route.QuickAccess
                     NavigationBarItem(
                         selected = selected,
-                        onClick = { navigateToTab(navController, route.value) },
+                        onClick = {
+                            if (route == Route.QuickAccess) onQuickAction() else navigateToTab(navController, route.value)
+                        },
                         label = { Text(route.label, maxLines = 1) },
                         icon = {
                             Icon(
@@ -395,10 +511,60 @@ private fun PillNavigationBar(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun QuickActionsSheet(onDismiss: () -> Unit, onNavigate: (String) -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Text(
+            "Quick access",
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        LazyColumn(Modifier.fillMaxWidth()) {
+            item { QuickAccessSectionTitle("Log") }
+            items(QuickLogItems, key = { it.route.value }) { item ->
+                QuickAccessRow(item, onNavigate)
+            }
+            item { QuickAccessSectionTitle("Go to") }
+            items(QuickDestinationItems, key = { it.route.value }) { item ->
+                QuickAccessRow(item, onNavigate)
+            }
+            item { Box(Modifier.padding(bottom = 24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun QuickAccessSectionTitle(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp)
+    )
+}
+
+@Composable
+private fun QuickAccessRow(item: QuickAccessItem, onNavigate: (String) -> Unit) {
+    Surface(
+        onClick = { onNavigate(item.route.value) },
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        ListItem(
+            headlineContent = { Text(item.title) },
+            supportingContent = { Text(item.subtitle) },
+            leadingContent = { Icon(item.route.icon, contentDescription = null) }
+        )
+    }
+    HorizontalDivider(Modifier.padding(horizontal = 24.dp))
+}
+
+@Composable
 private fun SideRail(
     currentDestination: NavDestination?,
     bottomRoutes: List<Route>,
-    navController: NavHostController
+    navController: NavHostController,
+    onQuickAction: () -> Unit
 ) {
     Surface(
         shape = RoundedCornerShape(26.dp),
@@ -423,10 +589,12 @@ private fun SideRail(
             bottomRoutes.forEach { route ->
                 val selected = currentDestination?.hierarchy?.any { destination ->
                     destination.route == route.value
-                } == true
+                } == true && route != Route.QuickAccess
                 NavigationRailItem(
                     selected = selected,
-                    onClick = { navigateToTab(navController, route.value) },
+                    onClick = {
+                        if (route == Route.QuickAccess) onQuickAction() else navigateToTab(navController, route.value)
+                    },
                     icon = {
                         Icon(
                             imageVector = if (selected) route.selectedIcon else route.icon,
@@ -446,6 +614,38 @@ private fun SideRail(
         }
     }
 }
+
+private fun navigateFromQuickAccess(navController: NavHostController, route: String) {
+    if (route == Route.LabelScan.value || route == Route.BarcodeScan.value) {
+        navController.navigate(Route.AddFood.value) { launchSingleTop = true }
+    }
+    navController.navigate(route) { launchSingleTop = true }
+}
+
+private data class QuickAccessItem(
+    val title: String,
+    val subtitle: String,
+    val route: Route
+)
+
+private val QuickLogItems = listOf(
+    QuickAccessItem("Add food", "Search or enter food manually", Route.AddFood),
+    QuickAccessItem("Scan nutrition label", "Capture nutrients from a package", Route.LabelScan),
+    QuickAccessItem("Scan barcode", "Look up a packaged food", Route.BarcodeScan),
+    QuickAccessItem("Scan meal", "Analyze a meal photo", Route.MealAnalysis),
+    QuickAccessItem("Start workout", "Choose a plan or quick workout", Route.Workout),
+    QuickAccessItem("Log body weight", "Add a new weight measurement", Route.BodyWeight)
+)
+
+private val QuickDestinationItems = listOf(
+    QuickAccessItem("Today", "Daily overview and hydration", Route.Dashboard),
+    QuickAccessItem("Nutrition", "Meals and nutrition targets", Route.Nutrition),
+    QuickAccessItem("Workout history", "Review previous training", Route.History),
+    QuickAccessItem("Progress", "Nutrition, weight, and strength trends", Route.Progress),
+    QuickAccessItem("Coaching", "Personalized recommendations", Route.Recommendations),
+    QuickAccessItem("Profile", "Health profile and goals", Route.Profile),
+    QuickAccessItem("Settings", "Preferences, privacy, and connections", Route.Settings)
+)
 
 private fun navigateToTab(navController: NavHostController, route: String) {
     navController.navigate(route) {

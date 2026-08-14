@@ -12,7 +12,15 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.StrokeCap
@@ -21,7 +29,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.raysix.fitns.core.design.AdaptiveTwoColumn
 import com.raysix.fitns.core.design.BrandGradient
-import com.raysix.fitns.core.design.EmptyStateCard
 import com.raysix.fitns.core.design.FitNsDimens
 import com.raysix.fitns.core.design.GradientHeroCard
 import com.raysix.fitns.core.design.LabeledProgress
@@ -34,8 +41,9 @@ import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.SectionTitle
 import com.raysix.fitns.core.design.StatCard
 import com.raysix.fitns.core.design.TagChip
+import com.raysix.fitns.core.design.isWideScreen
+import com.raysix.fitns.core.design.PillButton
 import com.raysix.fitns.domain.model.DailyNutritionDashboard
-import com.raysix.fitns.domain.model.FoodLogEntry
 import com.raysix.fitns.domain.model.NutrientAggregate
 import kotlin.math.roundToInt
 
@@ -50,13 +58,22 @@ fun DashboardScreen(
     message: String?,
     onAddFood: () -> Unit,
     onStartWorkout: () -> Unit,
-    onAddWater: (Double) -> Unit
+    onAddWater: (Double) -> Unit,
+    onRemoveWater: (Double) -> Unit,
+    onOpenSettings: () -> Unit
 ) {
+    val wide = isWideScreen()
+    var showDetails by remember { mutableStateOf(false) }
     AdaptiveTwoColumn(
         header = {
             ScreenHeader(
-                title = "FitNS",
-                subtitle = "Daily nutrition and strength workout status"
+                title = "Today",
+                subtitle = "Your nutrition, movement, and next best action",
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Outlined.Settings, contentDescription = "Open settings")
+                    }
+                }
             )
         },
         main = {
@@ -66,26 +83,26 @@ fun DashboardScreen(
                 onStartWorkout = onStartWorkout
             )
             MacroRingsCard(dashboard = dashboard)
-            WaterCard(dashboard = dashboard, message = message, onAddWater = onAddWater)
+            WaterCard(dashboard = dashboard, message = message, onAddWater = onAddWater, onRemoveWater = onRemoveWater)
             WorkoutSummaryCard(workoutSummary = workoutSummary, onStartWorkout = onStartWorkout)
-            if (mealBreakdown.isNotEmpty()) {
+            if (mealBreakdown.isNotEmpty() && (wide || showDetails)) {
                 MealBreakdownCard(meals = mealBreakdown)
             }
-            SectionTitle("Today's Entries")
-            if (dashboard.entries.isEmpty()) {
-                EmptyStateCard(
-                    title = "No foods logged yet.",
-                    message = "Add a meal to start seeing calories, macros, and micronutrient coverage."
+            if (!wide) {
+                PillButton(
+                    text = if (showDetails) "Hide insights" else "Show insights",
+                    modifier = Modifier.fillMaxWidth(),
+                    filled = false,
+                    onClick = { showDetails = !showDetails }
                 )
-            }
-            dashboard.entries.forEach { entry ->
-                FoodEntryCard(entry)
             }
         },
         side = {
-            DailyCoachCard(coach = coach)
-            ReadinessCard(readiness = readiness, onStartWorkout = onStartWorkout)
-            MicronutrientCard(micronutrients = micronutrients)
+            if (wide || showDetails) {
+                DailyCoachCard(coach = coach)
+                ReadinessCard(readiness = readiness, onStartWorkout = onStartWorkout)
+                MicronutrientCard(micronutrients = micronutrients)
+            }
         }
     )
 }
@@ -261,7 +278,12 @@ private fun MacroRing(
 }
 
 @Composable
-private fun WaterCard(dashboard: DailyNutritionDashboard, message: String?, onAddWater: (Double) -> Unit) {
+private fun WaterCard(
+    dashboard: DailyNutritionDashboard,
+    message: String?,
+    onAddWater: (Double) -> Unit,
+    onRemoveWater: (Double) -> Unit
+) {
     val percent = if (dashboard.goal.waterMilliliters > 0) {
         (dashboard.waterMilliliters / dashboard.goal.waterMilliliters).toFloat()
     } else 0f
@@ -280,6 +302,7 @@ private fun WaterCard(dashboard: DailyNutritionDashboard, message: String?, onAd
                         fontWeight = FontWeight.Medium
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        HeroPillButtonSmall("−250", { onRemoveWater(250.0) }, Modifier)
                         HeroPillButtonSmall("+250", { onAddWater(250.0) }, Modifier)
                         HeroPillButtonSmall("+500", { onAddWater(500.0) }, Modifier)
                     }
@@ -515,30 +538,6 @@ private fun MealBreakdownCard(meals: List<MealBreakdown>) {
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun FoodEntryCard(entry: FoodLogEntry) {
-    ModernCard {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(entry.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("${entry.grams.roundToInt()} g · ${entry.mealType}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(
-                    "${entry.nutrition.caloriesKcal.roundToInt()} kcal",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            Text(
-                "Protein ${entry.nutrition.proteinGrams.roundToInt()} g · Carbs ${entry.nutrition.carbohydratesGrams.roundToInt()} g · Fat ${entry.nutrition.fatGrams.roundToInt()} g",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

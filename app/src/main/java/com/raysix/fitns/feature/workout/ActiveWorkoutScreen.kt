@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -30,6 +31,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,7 +56,7 @@ import com.raysix.fitns.domain.model.Exercise
 import com.raysix.fitns.domain.model.WorkoutSetType
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun ActiveWorkoutScreen(
     uiState: WorkoutUiState,
@@ -72,6 +75,21 @@ fun ActiveWorkoutScreen(
     onResumeTimer: () -> Unit,
     onSkipTimer: () -> Unit
 ) {
+    var showDiscardConfirmation by remember { mutableStateOf(false) }
+    if (showDiscardConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirmation = false },
+            title = { Text("Discard workout?") },
+            text = { Text("Completed and edited sets in this active workout will be lost.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDiscardConfirmation = false
+                    onDiscard()
+                }) { Text("Discard", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { showDiscardConfirmation = false }) { Text("Keep workout") } }
+        )
+    }
     val session = uiState.activeSession
     if (session == null) {
         Column(
@@ -97,18 +115,20 @@ fun ActiveWorkoutScreen(
             .padding(horizontal = FitNsDimens.ScreenPadding),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item {
-            ActiveWorkoutHeader(
-                session = session,
-                timer = uiState.restTimer,
-                onBack = onBack,
-                onFinish = onFinish,
-                onDiscard = onDiscard,
-                onAddRestTime = onAddRestTime,
-                onPauseTimer = onPauseTimer,
-                onResumeTimer = onResumeTimer,
-                onSkipTimer = onSkipTimer
-            )
+        stickyHeader {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                ActiveWorkoutHeader(
+                    session = session,
+                    timer = uiState.restTimer,
+                    onBack = onBack,
+                    onFinish = onFinish,
+                    onDiscard = { showDiscardConfirmation = true },
+                    onAddRestTime = onAddRestTime,
+                    onPauseTimer = onPauseTimer,
+                    onResumeTimer = onResumeTimer,
+                    onSkipTimer = onSkipTimer
+                )
+            }
         }
         if (uiState.personalRecords.isNotEmpty()) {
             item {
@@ -158,25 +178,17 @@ private fun ActiveWorkoutHeader(
     onSkipTimer: () -> Unit
 ) {
     val progress = if (session.totalSetCount == 0) 0f else session.completedSetCount.toFloat() / session.totalSetCount
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Column {
-                    Text(session.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("${session.completedSetCount}/${session.totalSetCount} sets complete", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PillButton(text = "Discard", filled = false, onClick = onDiscard)
-                PillButton(text = "Finish", onClick = onFinish)
+            Column(Modifier.weight(1f)) {
+                Text(session.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text("${session.completedSetCount}/${session.totalSetCount} sets", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            IconButton(onClick = onDiscard) { Icon(Icons.Filled.Delete, contentDescription = "Discard workout", tint = MaterialTheme.colorScheme.error) }
+            PillButton(text = "Finish", onClick = onFinish)
         }
         LinearProgressIndicator(
             progress = { progress.coerceIn(0f, 1f) },
@@ -202,13 +214,23 @@ private fun RestTimerPanel(
     onResumeTimer: () -> Unit,
     onSkipTimer: () -> Unit
 ) {
-    SectionCard(
-        title = "Rest Timer",
-        subtitle = if (timer.secondsRemaining > 0) timer.secondsRemaining.formatTimer() else "Ready"
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                if (timer.secondsRemaining > 0) "Rest ${timer.secondsRemaining.formatTimer()}" else "Ready",
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            TimerIconButton("Subtract 15 seconds", "−15", onClick = { onAddRestTime(-15) })
             TimerIconButton("Add 15 seconds", "+15", onClick = { onAddRestTime(15) })
-            TimerIconButton("Subtract 15 seconds", "-15", onClick = { onAddRestTime(-15) })
             IconButton(onClick = if (timer.isRunning) onPauseTimer else onResumeTimer) {
                 Icon(
                     imageVector = if (timer.isRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -233,7 +255,7 @@ private fun TimerIconButton(contentDescription: String, text: String, onClick: (
         Text(
             text = text,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
         )
     }
 }

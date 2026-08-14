@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,12 +30,13 @@ import com.raysix.fitns.domain.model.RecommendationItem
 import com.raysix.fitns.domain.model.RecommendationSeverity
 
 @Composable
-fun RecommendationsScreen(uiState: RecommendationsUiState) {
+fun RecommendationsScreen(uiState: RecommendationsUiState, onBack: () -> Unit = {}) {
     AdaptiveTwoColumn(
         header = {
             ScreenHeader(
                 title = "Recommendations",
-                subtitle = "Cautious guidance from your local data."
+                subtitle = "Cautious guidance from your local data.",
+                actions = { TextButton(onClick = onBack) { Text("Back") } }
             )
         },
         main = {

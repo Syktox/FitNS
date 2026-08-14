@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 
-val BrandGreen = Color(0xFF00B365)
+val BrandGreen = Color(0xFF007A45)
 val BrandGreenDark = Color(0xFF3BEF8F)
 val AccentLime = Color(0xFFA8E10C)
 val AccentLimeDark = Color(0xFFC8E64D)

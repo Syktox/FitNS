@@ -1,9 +1,8 @@
 package com.raysix.fitns.di
 
 import android.content.Context
+import com.raysix.fitns.BuildConfig
 import androidx.room.Room
-import com.raysix.fitns.core.network.N8nApiService
-import com.raysix.fitns.core.settings.DefaultN8nBaseUrl
 import com.raysix.fitns.data.local.FitNsDatabase
 import com.raysix.fitns.data.local.Migration1To2
 import com.raysix.fitns.data.local.Migration2To3
@@ -40,8 +39,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
-import retrofit2.converter.moshi.MoshiConverterFactory
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
@@ -122,7 +119,7 @@ object AppModule {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            .addInterceptor(logging)
+            .apply { if (BuildConfig.DEBUG) addInterceptor(logging) }
             .build()
     }
 
@@ -134,14 +131,4 @@ object AppModule {
             .build()
     }
 
-    @Provides
-    @Singleton
-    fun provideN8nApiService(client: OkHttpClient, moshi: Moshi): N8nApiService {
-        return Retrofit.Builder()
-            .baseUrl(DefaultN8nBaseUrl)
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-            .create(N8nApiService::class.java)
-    }
 }

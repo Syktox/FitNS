@@ -8,9 +8,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -27,15 +36,17 @@ import com.raysix.fitns.core.design.GradientHeroCard
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.SectionTitle
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
-fun ProgressScreen(uiState: ProgressUiState) {
+fun ProgressScreen(uiState: ProgressUiState, onBack: () -> Unit = {}) {
     AdaptiveTwoColumn(
         header = {
             ScreenHeader(
                 title = "Progress",
-                subtitle = "Trends across nutrition, weight, and workouts."
+                subtitle = "Trends across nutrition, weight, and workouts.",
+                actions = { TextButton(onClick = onBack) { Text("Back") } }
             )
         },
         main = {
@@ -123,25 +134,130 @@ private fun BodyWeightAnalyticsCard(analytics: BodyWeightAnalytics) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NutritionAnalyticsCard(windows: List<NutritionAnalyticsWindow>) {
-    SectionCard(title = "Nutrition Analytics") {
-        if (windows.isEmpty()) {
-            Text("Log meals to see nutrition averages.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        windows.forEach { window ->
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("${window.days} days", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "${window.averageCalories.roundToInt()} kcal | P ${window.averageProtein.roundToInt()} g | C ${window.averageCarbs.roundToInt()} g | F ${window.averageFat.roundToInt()} g | Fiber ${window.averageFiber.roundToInt()} g",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "Goal adherence ${window.goalAdherencePercent.roundToInt()}%",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium
+    if (windows.isEmpty()) {
+        EmptyStateCard(
+            title = "Nutrition insights",
+            message = "Log your first meal to see daily calorie and macro averages."
+        )
+        return
+    }
+
+    var selectedDays by rememberSaveable { mutableIntStateOf(windows.first().days) }
+    val window = windows.firstOrNull { it.days == selectedDays } ?: windows.first()
+    val loggedDayLabel = if (window.loggedDays == 1) "1 logged day" else "${window.loggedDays} logged days"
+
+    SectionCard(
+        title = "Nutrition insights",
+        subtitle = "Daily averages based on $loggedDayLabel"
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            windows.forEach { option ->
+                FilterChip(
+                    selected = option.days == window.days,
+                    onClick = { selectedDays = option.days },
+                    label = { Text("${option.days} days") },
+                    modifier = Modifier.weight(1f)
                 )
             }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "Daily calorie average",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    window.averageCalories.roundToInt().toString(),
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    " kcal per day",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+        }
+
+        if (window.calorieGoal > 0.0) {
+            val calorieDifference = window.averageCalories - window.calorieGoal
+            LinearProgressIndicator(
+                progress = { (window.averageCalories / window.calorieGoal).toFloat().coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                strokeCap = StrokeCap.Round,
+                gapSize = 6.dp
+            )
+            Text(
+                text = when {
+                    abs(calorieDifference) < 1.0 -> "Right on your ${window.calorieGoal.roundToInt()} kcal goal"
+                    calorieDifference > 0.0 -> "${calorieDifference.roundToInt()} kcal above your ${window.calorieGoal.roundToInt()} kcal goal"
+                    else -> "${abs(calorieDifference).roundToInt()} kcal below your ${window.calorieGoal.roundToInt()} kcal goal"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Text(
+                "Set a calorie goal in Profile to compare your average.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            NutritionMetric("Protein", window.averageProtein, Modifier.weight(1f))
+            NutritionMetric("Carbohydrates", window.averageCarbs, Modifier.weight(1f))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            NutritionMetric("Fat", window.averageFat, Modifier.weight(1f))
+            NutritionMetric("Fiber", window.averageFiber, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun NutritionMetric(label: String, grams: Double, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "${grams.roundToInt()} g",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                "daily average",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

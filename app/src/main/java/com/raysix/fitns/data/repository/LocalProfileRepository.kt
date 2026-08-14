@@ -17,9 +17,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
+import com.raysix.fitns.data.local.FitNsDatabase
+import androidx.room.withTransaction
 
 class LocalProfileRepository @Inject constructor(
     private val profileDao: ProfileDao,
+    private val database: FitNsDatabase,
     private val syncQueueWriter: SyncQueueWriter,
     private val syncPayloadFactory: SyncPayloadFactory
 ) : ProfileRepository {
@@ -62,13 +65,16 @@ class LocalProfileRepository @Inject constructor(
         val error = validateProfile(profile)
         if (error != null) return AppResult.Failure(error)
         val savedProfile = profile.copy(id = DefaultUserProfileId)
-        profileDao.upsertProfile(savedProfile.toEntity())
-        syncQueueWriter.enqueue(
-            entityType = EntityTypeUserProfile,
-            entityId = savedProfile.id,
-            operation = OperationUpsert,
-            payloadJson = syncPayloadFactory.profile(savedProfile, OperationUpsert)
-        )
+        database.withTransaction {
+            profileDao.upsertProfile(savedProfile.toEntity())
+            syncQueueWriter.enqueueOnly(
+                entityType = EntityTypeUserProfile,
+                entityId = savedProfile.id,
+                operation = OperationUpsert,
+                payloadJson = syncPayloadFactory.profile(savedProfile, OperationUpsert)
+            )
+        }
+        syncQueueWriter.schedule()
         return AppResult.Success(Unit)
     }
 

@@ -17,11 +17,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,24 +46,27 @@ fun ProfileScreen(
     onSave: (UserProfile, NutritionGoal) -> Unit,
     onOpenWeight: () -> Unit = {},
     onOpenTips: () -> Unit = {},
-    onOpenSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit = {},
+    onBack: () -> Unit = {}
 ) {
-    var age by remember { mutableStateOf("") }
-    var physiology by remember { mutableStateOf("") }
-    var height by remember { mutableStateOf("") }
-    var weight by remember { mutableStateOf("") }
-    var targetWeight by remember { mutableStateOf("") }
-    var activity by remember { mutableStateOf("") }
-    var trainingDays by remember { mutableStateOf("") }
-    var goalName by remember { mutableStateOf("") }
-    var calories by remember { mutableStateOf("") }
-    var protein by remember { mutableStateOf("") }
-    var carbs by remember { mutableStateOf("") }
-    var fat by remember { mutableStateOf("") }
-    var fiber by remember { mutableStateOf("") }
-    var water by remember { mutableStateOf("") }
+    var age by rememberSaveable { mutableStateOf("") }
+    var physiology by rememberSaveable { mutableStateOf("") }
+    var height by rememberSaveable { mutableStateOf("") }
+    var weight by rememberSaveable { mutableStateOf("") }
+    var targetWeight by rememberSaveable { mutableStateOf("") }
+    var activity by rememberSaveable { mutableStateOf("") }
+    var trainingDays by rememberSaveable { mutableStateOf("") }
+    var goalName by rememberSaveable { mutableStateOf("") }
+    var calories by rememberSaveable { mutableStateOf("") }
+    var protein by rememberSaveable { mutableStateOf("") }
+    var carbs by rememberSaveable { mutableStateOf("") }
+    var fat by rememberSaveable { mutableStateOf("") }
+    var fiber by rememberSaveable { mutableStateOf("") }
+    var water by rememberSaveable { mutableStateOf("") }
+    var initialized by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(uiState.profile, uiState.nutritionGoal) {
+        if (initialized || !uiState.isLoaded) return@LaunchedEffect
         age = uiState.profile.age?.toString().orEmpty()
         physiology = uiState.profile.sexOrPhysiology.orEmpty()
         height = uiState.profile.heightCm?.formatPlain().orEmpty()
@@ -77,6 +81,7 @@ fun ProfileScreen(
         fat = uiState.nutritionGoal.fatGrams.formatPlain()
         fiber = uiState.nutritionGoal.fiberGrams.formatPlain()
         water = uiState.nutritionGoal.waterMilliliters.formatPlain()
+        initialized = true
     }
 
     AdaptiveTwoColumn(
@@ -85,6 +90,7 @@ fun ProfileScreen(
                 title = "Profile",
                 subtitle = "Set goals that drive nutrition targets and progress tracking.",
                 actions = {
+                    TextButton(onClick = onBack) { Text("Back") }
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             imageVector = Icons.Outlined.Settings,

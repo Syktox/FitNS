@@ -61,7 +61,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
@@ -97,7 +98,6 @@ android {
 
     sourceSets {
         getByName("debug").assets.srcDir("$projectDir/schemas")
-        getByName("main").assets.srcDir("$projectDir/schemas")
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
         getByName("test").assets.srcDir("$projectDir/schemas")
     }

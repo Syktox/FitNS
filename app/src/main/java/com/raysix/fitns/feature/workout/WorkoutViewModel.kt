@@ -2,6 +2,7 @@ package com.raysix.fitns.feature.workout
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.SavedStateHandle
 import com.raysix.fitns.core.model.AppError
 import com.raysix.fitns.core.model.AppResult
 import com.raysix.fitns.domain.model.ActiveWorkoutExercise
@@ -29,6 +30,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.squareup.moshi.Moshi
 import javax.inject.Inject
 
 data class WorkoutUiState(
@@ -67,13 +71,21 @@ class WorkoutViewModel @Inject constructor(
     private val workoutRepository: WorkoutRepository,
     private val progressionCalculator: WorkoutProgressionCalculator,
     private val buildActiveWorkoutSession: BuildActiveWorkoutSessionUseCase,
-    private val personalRecordDetector: PersonalRecordDetector
+    private val personalRecordDetector: PersonalRecordDetector,
+    private val savedStateHandle: SavedStateHandle,
+    moshi: Moshi
 ) : ViewModel() {
+    private val activeSessionAdapter = moshi.adapter(ActiveWorkoutSession::class.java)
     private val errorMessage = MutableStateFlow<String?>(null)
-    private val activeSession = MutableStateFlow<ActiveWorkoutSession?>(null)
+    private val activeSession = MutableStateFlow(
+        savedStateHandle.get<String>(ActiveSessionKey)?.let { json ->
+            runCatching { activeSessionAdapter.fromJson(json) }.getOrNull()
+        }
+    )
     private val restTimer = MutableStateFlow(RestTimerUiState())
     private val personalRecords = MutableStateFlow<List<PersonalRecordEvent>>(emptyList())
     private var timerJob: Job? = null
+    private var sessionPersistenceJob: Job? = null
 
     private val repositorySnapshot = combine(
         workoutRepository.observeExercises(),
@@ -226,7 +238,7 @@ class WorkoutViewModel @Inject constructor(
     }
 
     fun startWorkoutPlan(plan: WorkoutPlan) {
-        activeSession.value = buildActiveWorkoutSession.fromPlan(plan, uiState.value.history)
+        setActiveSession(buildActiveWorkoutSession.fromPlan(plan, uiState.value.history), persistImmediately = true)
         personalRecords.value = emptyList()
         skipRestTimer()
     }
@@ -381,7 +393,7 @@ class WorkoutViewModel @Inject constructor(
             val result = workoutRepository.saveWorkoutSession(session)
             errorMessage.value = when (result) {
                 is AppResult.Success -> {
-                    activeSession.value = null
+                    setActiveSession(null)
                     personalRecords.value = records
                     skipRestTimer()
                     onFinished()
@@ -393,7 +405,7 @@ class WorkoutViewModel @Inject constructor(
     }
 
     fun discardActiveWorkout() {
-        activeSession.value = null
+        setActiveSession(null)
         skipRestTimer()
     }
 
@@ -458,7 +470,21 @@ class WorkoutViewModel @Inject constructor(
     }
 
     private fun updateActiveSession(reducer: (ActiveWorkoutSession) -> ActiveWorkoutSession) {
-        activeSession.value = activeSession.value?.let(reducer)
+        setActiveSession(activeSession.value?.let(reducer))
+    }
+
+    private fun setActiveSession(session: ActiveWorkoutSession?, persistImmediately: Boolean = false) {
+        activeSession.value = session
+        sessionPersistenceJob?.cancel()
+        if (session == null) {
+            savedStateHandle.remove<String>(ActiveSessionKey)
+        } else {
+            sessionPersistenceJob = viewModelScope.launch {
+                if (!persistImmediately) delay(SessionPersistenceDebounceMillis)
+                val json = withContext(Dispatchers.Default) { activeSessionAdapter.toJson(session) }
+                savedStateHandle[ActiveSessionKey] = json
+            }
+        }
     }
 
     private fun updateActiveExercise(
@@ -548,5 +574,10 @@ class WorkoutViewModel @Inject constructor(
         )
 
         return candidates.filter { it.exercises.isNotEmpty() }
+    }
+
+    private companion object {
+        const val ActiveSessionKey = "active_workout_session"
+        const val SessionPersistenceDebounceMillis = 300L
     }
 }

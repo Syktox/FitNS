@@ -146,6 +146,16 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    fun removeWater(milliliters: Double) {
+        viewModelScope.launch {
+            val result = nutritionRepository.removeWater(milliliters)
+            message.value = when (result) {
+                is AppResult.Success -> "Water entry adjusted."
+                is AppResult.Failure -> "Water could not be adjusted."
+            }
+        }
+    }
+
     private fun List<com.raysix.fitns.domain.model.WorkoutLogEntry>.todaySummary(): DashboardWorkoutSummary {
         val zone = ZoneId.systemDefault()
         val start = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()

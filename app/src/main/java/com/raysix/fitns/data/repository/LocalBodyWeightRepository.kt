@@ -5,6 +5,8 @@ import com.raysix.fitns.core.model.AppResult
 import com.raysix.fitns.core.sync.SyncPayloadFactory
 import com.raysix.fitns.core.sync.SyncQueueWriter
 import com.raysix.fitns.data.local.dao.BodyWeightDao
+import com.raysix.fitns.data.local.FitNsDatabase
+import androidx.room.withTransaction
 import com.raysix.fitns.domain.model.BodyWeightLogEntry
 import com.raysix.fitns.domain.repository.BodyWeightRepository
 import kotlinx.coroutines.flow.Flow
@@ -13,6 +15,7 @@ import javax.inject.Inject
 
 class LocalBodyWeightRepository @Inject constructor(
     private val bodyWeightDao: BodyWeightDao,
+    private val database: FitNsDatabase,
     private val syncQueueWriter: SyncQueueWriter,
     private val syncPayloadFactory: SyncPayloadFactory
 ) : BodyWeightRepository {
@@ -25,26 +28,32 @@ class LocalBodyWeightRepository @Inject constructor(
     override suspend fun addEntry(entry: BodyWeightLogEntry): AppResult<Unit> {
         val error = validate(entry)
         if (error != null) return AppResult.Failure(error)
-        bodyWeightDao.upsert(entry.toEntity())
-        syncQueueWriter.enqueue(
-            entityType = EntityTypeBodyWeight,
-            entityId = entry.id,
-            operation = OperationUpsert,
-            payloadJson = syncPayloadFactory.bodyWeight(entry, OperationUpsert)
-        )
+        database.withTransaction {
+            bodyWeightDao.upsert(entry.toEntity())
+            syncQueueWriter.enqueueOnly(
+                entityType = EntityTypeBodyWeight,
+                entityId = entry.id,
+                operation = OperationUpsert,
+                payloadJson = syncPayloadFactory.bodyWeight(entry, OperationUpsert)
+            )
+        }
+        syncQueueWriter.schedule()
         return AppResult.Success(Unit)
     }
 
     override suspend fun deleteEntry(entry: BodyWeightLogEntry): AppResult<Unit> {
         val existing = bodyWeightDao.findEntry(entry.id)?.toDomain()
             ?: return AppResult.Failure(AppError.NotFound)
-        bodyWeightDao.softDelete(entry.id, System.currentTimeMillis())
-        syncQueueWriter.enqueue(
-            entityType = EntityTypeBodyWeight,
-            entityId = entry.id,
-            operation = OperationDelete,
-            payloadJson = syncPayloadFactory.bodyWeight(existing, OperationDelete)
-        )
+        database.withTransaction {
+            bodyWeightDao.softDelete(entry.id, System.currentTimeMillis())
+            syncQueueWriter.enqueueOnly(
+                entityType = EntityTypeBodyWeight,
+                entityId = entry.id,
+                operation = OperationDelete,
+                payloadJson = syncPayloadFactory.bodyWeight(existing, OperationDelete)
+            )
+        }
+        syncQueueWriter.schedule()
         return AppResult.Success(Unit)
     }
 

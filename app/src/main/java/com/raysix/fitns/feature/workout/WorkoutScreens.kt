@@ -76,7 +76,11 @@ fun WorkoutStartScreen(
     onShowHistory: () -> Unit
 ) {
     val fallbackExercise = uiState.exercises.firstOrNull()
-    var selectedExercise by remember(fallbackExercise?.id) { mutableStateOf(fallbackExercise) }
+    var selectedExerciseId by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedExercise = uiState.exercises.firstOrNull { it.id == selectedExerciseId } ?: fallbackExercise
+    LaunchedEffect(fallbackExercise?.id) {
+        if (selectedExerciseId == null) selectedExerciseId = fallbackExercise?.id
+    }
     var weight by rememberSaveable(fallbackExercise?.id) { mutableStateOf((selectedExercise?.lastWeightKg ?: 0.0).roundToInt().toString()) }
     var reps by rememberSaveable(fallbackExercise?.id) { mutableStateOf((selectedExercise?.lastRepetitions ?: 10).toString()) }
     var sets by rememberSaveable(fallbackExercise?.id) { mutableStateOf((selectedExercise?.lastSets ?: 3).toString()) }
@@ -88,11 +92,14 @@ fun WorkoutStartScreen(
     var equipmentType by rememberSaveable { mutableStateOf("Machine") }
     var gym by rememberSaveable { mutableStateOf("") }
     var restSeconds by rememberSaveable { mutableStateOf(0) }
-    var activeTemplate by remember { mutableStateOf<WorkoutTemplate?>(null) }
-    var activePlan by remember { mutableStateOf<WorkoutPlan?>(null) }
-    var completedPlanExerciseIds by rememberSaveable(activePlan?.id) { mutableStateOf(emptySet<String>()) }
+    var activeTemplateId by rememberSaveable { mutableStateOf<String?>(null) }
+    val activeTemplate = uiState.templates.firstOrNull { it.id == activeTemplateId }
+    var activePlanId by rememberSaveable { mutableStateOf<String?>(null) }
+    val activePlan = uiState.plans.firstOrNull { it.id == activePlanId }
+    var completedPlanExerciseIds by rememberSaveable(activePlanId) { mutableStateOf(emptySet<String>()) }
     var showPlanBuilder by rememberSaveable { mutableStateOf(false) }
-    var editingPlan by remember { mutableStateOf<WorkoutPlan?>(null) }
+    var editingPlanId by rememberSaveable { mutableStateOf<String?>(null) }
+    val editingPlan = uiState.plans.firstOrNull { it.id == editingPlanId }
     var planName by rememberSaveable { mutableStateOf("My Workout Plan") }
     var planFocus by rememberSaveable { mutableStateOf("Strength and consistency") }
     var selectedPlanExerciseIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
@@ -151,7 +158,7 @@ fun WorkoutStartScreen(
                     onClick = {
                         if (showPlanBuilder) {
                             showPlanBuilder = false
-                            editingPlan = null
+                            editingPlanId = null
                         } else {
                             planName = "My Workout Plan"
                             planFocus = "Strength and consistency"
@@ -160,7 +167,7 @@ fun WorkoutStartScreen(
                             planRepMin = "8"
                             planRepMax = "12"
                             planRestSeconds = "90"
-                            editingPlan = null
+                            editingPlanId = null
                             showPlanBuilder = true
                         }
                     }
@@ -228,7 +235,7 @@ fun WorkoutStartScreen(
                             )
                         }
                         selectedPlanExerciseIds = emptyList()
-                        editingPlan = null
+                        editingPlanId = null
                         showPlanBuilder = false
                     }
                 )
@@ -244,10 +251,10 @@ fun WorkoutStartScreen(
                         plan = plan,
                         selected = activePlan?.id == plan.id,
                         onStart = {
-                            activePlan = plan
+                            activePlanId = plan.id
                             completedPlanExerciseIds = emptySet()
                             plan.exercises.firstOrNull()?.exercise?.let { exercise ->
-                                selectedExercise = exercise
+                                selectedExerciseId = exercise.id
                                 weight = (exercise.lastWeightKg ?: 0.0).roundToInt().toString()
                                 reps = (exercise.lastRepetitions ?: plan.exercises.first().targetRepMin).toString()
                                 sets = plan.exercises.first().targetSets.toString()
@@ -256,7 +263,7 @@ fun WorkoutStartScreen(
                             onStartPlan(plan)
                         },
                         onEdit = {
-                            editingPlan = plan
+                            editingPlanId = plan.id
                             planName = plan.name
                             planFocus = plan.focus
                             selectedPlanExerciseIds = plan.exercises.map { it.exercise.id }
@@ -283,7 +290,7 @@ fun WorkoutStartScreen(
                         }
                     },
                     onChooseExercise = { planExercise ->
-                        selectedExercise = planExercise.exercise
+                        selectedExerciseId = planExercise.exercise.id
                         weight = (planExercise.exercise.lastWeightKg ?: 0.0).roundToInt().toString()
                         reps = (planExercise.exercise.lastRepetitions ?: planExercise.targetRepMin).toString()
                         sets = planExercise.targetSets.toString()
@@ -299,10 +306,10 @@ fun WorkoutStartScreen(
                             template = template,
                             selected = activeTemplate?.id == template.id,
                             onClick = {
-                                activeTemplate = template
-                                activePlan = null
+                                activeTemplateId = template.id
+                                activePlanId = null
                                 template.exercises.firstOrNull()?.let { exercise ->
-                                    selectedExercise = exercise
+                                    selectedExerciseId = exercise.id
                                     weight = (exercise.lastWeightKg ?: 0.0).roundToInt().toString()
                                     reps = (exercise.lastRepetitions ?: 10).toString()
                                     sets = (exercise.lastSets ?: 3).toString()
@@ -317,7 +324,7 @@ fun WorkoutStartScreen(
                     ActiveTemplateCard(
                         template = template,
                         onChooseExercise = { exercise ->
-                            selectedExercise = exercise
+                            selectedExerciseId = exercise.id
                             weight = (exercise.lastWeightKg ?: 0.0).roundToInt().toString()
                             reps = (exercise.lastRepetitions ?: 10).toString()
                             sets = (exercise.lastSets ?: 3).toString()
@@ -386,7 +393,7 @@ fun WorkoutStartScreen(
                     exercise = exercise,
                     selected = selectedExercise?.id == exercise.id,
                     onClick = {
-                        selectedExercise = exercise
+                        selectedExerciseId = exercise.id
                         weight = (exercise.lastWeightKg ?: 0.0).roundToInt().toString()
                         reps = (exercise.lastRepetitions ?: 10).toString()
                         sets = (exercise.lastSets ?: 3).toString()
@@ -747,15 +754,17 @@ private fun ActiveTemplateCard(
 fun WorkoutHistoryScreen(
     history: List<WorkoutLogEntry>,
     progressionHint: (WorkoutLogEntry) -> String,
-    onDeleteWorkout: (WorkoutLogEntry) -> Unit
+    onDeleteWorkout: (WorkoutLogEntry) -> Unit,
+    onBack: () -> Unit = {}
 ) {
+    val visibleHistory = history.take(100)
     var pendingDelete by remember { mutableStateOf<WorkoutLogEntry?>(null) }
 
     pendingDelete?.let { workout ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("Delete Workout") },
-            text = { Text("Remove ${workout.exercise.name} from your workout history?") },
+            text = { Text("Delete this entire workout session? All exercises recorded in the same session will be removed.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -774,7 +783,7 @@ fun WorkoutHistoryScreen(
         )
     }
 
-    val mid = (history.size + 1) / 2
+    val mid = (visibleHistory.size + 1) / 2
     if (isWideScreen()) {
         Column(
             modifier = Modifier
@@ -783,7 +792,10 @@ fun WorkoutHistoryScreen(
                 .padding(horizontal = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Workout History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Workout History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                TextButton(onClick = onBack) { Text("Back") }
+            }
             if (history.isEmpty()) {
                 EmptyStateCard(
                     title = "No workouts logged yet.",
@@ -792,12 +804,12 @@ fun WorkoutHistoryScreen(
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        history.take(mid).forEach { workout ->
+                        visibleHistory.take(mid).forEach { workout ->
                             HistoryEntryCard(workout = workout, progressionHint = progressionHint, onDelete = { pendingDelete = workout })
                         }
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        history.drop(mid).forEach { workout ->
+                        visibleHistory.drop(mid).forEach { workout ->
                             HistoryEntryCard(workout = workout, progressionHint = progressionHint, onDelete = { pendingDelete = workout })
                         }
                     }
@@ -812,16 +824,20 @@ fun WorkoutHistoryScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Workout History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Workout History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                TextButton(onClick = onBack) { Text("Back") }
+            }
             if (history.isEmpty()) {
                 EmptyStateCard(
                     title = "No workouts logged yet.",
                     message = "Save your first set to unlock progression hints and training volume."
                 )
             }
-            history.forEach { workout ->
+            visibleHistory.forEach { workout ->
                 HistoryEntryCard(workout = workout, progressionHint = progressionHint, onDelete = { pendingDelete = workout })
             }
+            if (history.size > visibleHistory.size) Text("Showing the 100 most recent exercises", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

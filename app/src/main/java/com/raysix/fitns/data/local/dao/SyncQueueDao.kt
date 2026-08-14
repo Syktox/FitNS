@@ -28,6 +28,12 @@ interface SyncQueueDao {
     @Query("SELECT COUNT(*) FROM sync_queue_items WHERE deletedAt IS NULL AND syncStatus IN ('PendingSync', 'Failed')")
     fun observePendingCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM sync_queue_items WHERE deletedAt IS NULL AND syncStatus = 'Conflict'")
+    fun observeConflictCount(): Flow<Int>
+
+    @Query("SELECT lastError FROM sync_queue_items WHERE deletedAt IS NULL AND syncStatus = 'Conflict' ORDER BY updatedAt DESC LIMIT 1")
+    fun observeLatestConflictError(): Flow<String?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: SyncQueueItemEntity)
 
@@ -54,5 +60,30 @@ interface SyncQueueDao {
         WHERE id = :id
         """
     )
-    suspend fun markRetry(id: String, status: SyncStatus, updatedAt: Long, nextAttemptAt: Long, lastError: String)
+    suspend fun markRetry(id: String, status: SyncStatus, updatedAt: Long, nextAttemptAt: Long?, lastError: String)
+
+    @Query(
+        """
+        UPDATE sync_queue_items
+        SET syncStatus = 'Conflict',
+            updatedAt = :updatedAt,
+            nextAttemptAt = NULL,
+            lastError = :lastError
+        WHERE id = :id
+        """
+    )
+    suspend fun markTerminalFailure(id: String, updatedAt: Long, lastError: String)
+
+    @Query(
+        """
+        UPDATE sync_queue_items
+        SET syncStatus = 'PendingSync',
+            retryCount = 0,
+            updatedAt = :updatedAt,
+            nextAttemptAt = NULL,
+            lastError = NULL
+        WHERE deletedAt IS NULL AND syncStatus = 'Conflict'
+        """
+    )
+    suspend fun requeueConfigurationFailures(updatedAt: Long)
 }

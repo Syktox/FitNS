@@ -41,6 +41,7 @@ import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.SectionTitle
 import com.raysix.fitns.core.design.TagChip
+import com.raysix.fitns.core.design.isWideScreen
 import com.raysix.fitns.domain.model.DataQuality
 import com.raysix.fitns.domain.model.DailyNutritionDashboard
 import com.raysix.fitns.domain.model.CustomFood
@@ -86,6 +87,8 @@ fun NutritionDayScreen(
     var showSaveMealDialog by remember { mutableStateOf(false) }
     var mealName by rememberSaveable { mutableStateOf("Saved Meal") }
     var selectedMeal by remember { mutableStateOf<MealType?>(null) }
+    var showMoreTools by rememberSaveable { mutableStateOf(false) }
+    val wide = isWideScreen()
     val visibleEntries = if (selectedMeal == null) {
         dashboard.entries
     } else {
@@ -276,53 +279,42 @@ fun NutritionDayScreen(
                     onDelete = { pendingDelete = entry }
                 )
             }
+            if (!wide) {
+                ActionPill(
+                    text = if (showMoreTools) "Hide food tools" else "More food tools",
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { showMoreTools = !showMoreTools }
+                )
+            }
         },
         side = {
-            MicronutrientsCard(micronutrients = micronutrients)
-            CopyPreviousMealsCard(
-                onCopyYesterday = onCopyYesterday,
-                onCopyPreviousMeal = onCopyPreviousMeal
-            )
-            if (dashboard.entries.isNotEmpty()) {
-                ActionPill(
-                    text = "Save Today as Meal",
-                    filled = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { showSaveMealDialog = true }
+            if (wide || showMoreTools) {
+                MicronutrientsCard(micronutrients = micronutrients)
+                CopyPreviousMealsCard(
+                    onCopyYesterday = onCopyYesterday,
+                    onCopyPreviousMeal = onCopyPreviousMeal
                 )
-            }
-            FoodSearchCard(
-                sections = foodSearch,
-                onQueryChange = onFoodSearchQueryChange,
-                onUseRecent = onDuplicateFood,
-                onUseFavorite = onUseFavorite,
-                onUseCustomFood = onUseCustomFood,
-                onDeleteCustomFood = { pendingCustomDelete = it }
-            )
-            SavedMealsCard(
-                meals = savedMeals,
-                onLogSavedMeal = onLogSavedMeal,
-                onDeleteSavedMeal = { pendingSavedMealDelete = it }
-            )
-            if (foodFavorites.isNotEmpty()) {
-                SectionTitle("Favorites")
-            }
-            foodFavorites.forEach { favorite ->
-                FavoriteCard(
-                    favorite = favorite,
-                    onUse = { onUseFavorite(favorite) },
-                    onDelete = { pendingFavoriteDelete = favorite }
+                if (dashboard.entries.isNotEmpty()) {
+                    ActionPill(text = "Save Today as Meal", filled = true, modifier = Modifier.fillMaxWidth(), onClick = { showSaveMealDialog = true })
+                }
+                FoodSearchCard(
+                    sections = foodSearch,
+                    onQueryChange = onFoodSearchQueryChange,
+                    onUseRecent = onDuplicateFood,
+                    onUseFavorite = onUseFavorite,
+                    onUseCustomFood = onUseCustomFood,
+                    onDeleteCustomFood = { pendingCustomDelete = it }
                 )
-            }
-            if (foodHistory.isNotEmpty()) {
-                SectionTitle("Quick Reuse")
-            }
-            foodHistory.take(5).forEach { entry ->
-                QuickReuseCard(
-                    entry = entry,
-                    onUse = { onDuplicateFood(entry) },
-                    onSaveFavorite = { onSaveFavorite(entry) }
-                )
+                SavedMealsCard(meals = savedMeals, onLogSavedMeal = onLogSavedMeal, onDeleteSavedMeal = { pendingSavedMealDelete = it })
+                if (foodFavorites.isNotEmpty()) SectionTitle("Favorites")
+                foodFavorites.forEach { favorite ->
+                    FavoriteCard(favorite = favorite, onUse = { onUseFavorite(favorite) }, onDelete = { pendingFavoriteDelete = favorite })
+                }
+                if (foodHistory.isNotEmpty()) SectionTitle("Quick Reuse")
+                foodHistory.take(5).forEach { entry ->
+                    QuickReuseCard(entry = entry, onUse = { onDuplicateFood(entry) }, onSaveFavorite = { onSaveFavorite(entry) })
+                }
             }
         }
     )

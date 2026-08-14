@@ -21,9 +21,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import java.util.UUID
 import javax.inject.Inject
+import com.raysix.fitns.data.local.FitNsDatabase
+import androidx.room.withTransaction
 
 class LocalWorkoutRepository @Inject constructor(
     private val workoutDao: WorkoutDao,
+    private val database: FitNsDatabase,
     private val syncQueueWriter: SyncQueueWriter,
     private val syncPayloadFactory: SyncPayloadFactory
 ) : WorkoutRepository {
@@ -34,14 +37,13 @@ class LocalWorkoutRepository @Inject constructor(
             workoutDao.observeWorkoutSets()
         ) { exercises, workoutExercises, sets ->
             val seededExercises = mergeDefaultExercises(exercises)
+            val workoutExercisesByExercise = workoutExercises.groupBy { it.exerciseId }
+            val setsByWorkoutExercise = sets.groupBy { it.workoutExerciseId }
             seededExercises.map { exercise ->
-                val relatedWorkoutExerciseIds = workoutExercises
-                    .filter { it.exerciseId == exercise.id }
-                    .map { it.id }
-                    .toSet()
-                val latestSet = sets.firstOrNull { it.workoutExerciseId in relatedWorkoutExerciseIds }
-                val best = sets
-                    .filter { it.workoutExerciseId in relatedWorkoutExerciseIds }
+                val relatedSets = workoutExercisesByExercise[exercise.id].orEmpty()
+                    .flatMap { workoutExercise -> setsByWorkoutExercise[workoutExercise.id].orEmpty() }
+                val latestSet = relatedSets.maxByOrNull { it.createdAt }
+                val best = relatedSets
                     .maxOfOrNull { it.weightKg }
                 exercise.toDomain(
                     lastWeightKg = latestSet?.weightKg,
@@ -59,11 +61,12 @@ class LocalWorkoutRepository @Inject constructor(
             workoutDao.observeWorkoutExercises(),
             workoutDao.observeWorkoutSets()
         ) { exercises, workoutExercises, sets ->
+            val exerciseById = exercises.associateBy { it.id }
+            val setsByWorkoutExercise = sets.groupBy { it.workoutExerciseId }
             workoutExercises.mapNotNull { workoutExercise ->
-                val exercise = exercises.firstOrNull { it.id == workoutExercise.exerciseId }
+                val exercise = exerciseById[workoutExercise.exerciseId]
                     ?: return@mapNotNull null
-                val exerciseSets = sets
-                    .filter { it.workoutExerciseId == workoutExercise.id }
+                val exerciseSets = setsByWorkoutExercise[workoutExercise.id].orEmpty()
                     .sortedWith(compareBy<WorkoutSetEntity> { it.setCount }.thenBy { it.createdAt })
                 if (exerciseSets.isEmpty()) {
                     return@mapNotNull null
@@ -85,12 +88,13 @@ class LocalWorkoutRepository @Inject constructor(
             workoutDao.observeWorkoutPlanExercises(),
             observeExercises()
         ) { plans, planExercises, exercises ->
+            val planExercisesByPlan = planExercises.groupBy { it.planId }
+            val exerciseById = exercises.associateBy { it.id }
             plans.map { plan ->
-                val items = planExercises
-                    .filter { it.planId == plan.id }
+                val items = planExercisesByPlan[plan.id].orEmpty()
                     .sortedBy { it.sortOrder }
                     .mapNotNull { planExercise ->
-                        val exercise = exercises.firstOrNull { it.id == planExercise.exerciseId }
+                        val exercise = exerciseById[planExercise.exerciseId]
                             ?: return@mapNotNull null
                         WorkoutPlanExercise(
                             exercise = exercise,
@@ -129,24 +133,27 @@ class LocalWorkoutRepository @Inject constructor(
         val workoutId = UUID.randomUUID().toString()
         val workoutExerciseId = UUID.randomUUID().toString()
         val syncEntry = entry.copy(id = workoutId, loggedAt = now)
-        workoutDao.addWorkoutSet(
-            exercise = syncEntry.exercise.toEntity(now),
-            workout = newWorkoutEntity(workoutId, now),
-            workoutExercise = newWorkoutExerciseEntity(
-                id = workoutExerciseId,
-                workoutId = workoutId,
-                exerciseId = syncEntry.exercise.id,
-                notes = syncEntry.notes,
-                now = now
-            ),
-            set = set.toEntity(workoutExerciseId, now)
-        )
-        syncQueueWriter.enqueue(
-            entityType = EntityTypeWorkout,
-            entityId = workoutId,
-            operation = OperationUpsert,
-            payloadJson = syncPayloadFactory.workout(syncEntry, OperationUpsert)
-        )
+        database.withTransaction {
+            workoutDao.addWorkoutSet(
+                exercise = syncEntry.exercise.toEntity(now),
+                workout = newWorkoutEntity(workoutId, now),
+                workoutExercise = newWorkoutExerciseEntity(
+                    id = workoutExerciseId,
+                    workoutId = workoutId,
+                    exerciseId = syncEntry.exercise.id,
+                    notes = syncEntry.notes,
+                    now = now
+                ),
+                set = set.toEntity(workoutExerciseId, now)
+            )
+            syncQueueWriter.enqueueOnly(
+                entityType = EntityTypeWorkout,
+                entityId = workoutId,
+                operation = OperationUpsert,
+                payloadJson = syncPayloadFactory.workout(syncEntry, OperationUpsert)
+            )
+        }
+        syncQueueWriter.schedule()
         return AppResult.Success(Unit)
     }
 
@@ -182,18 +189,24 @@ class LocalWorkoutRepository @Inject constructor(
             completedSets.map { set -> set.toEntity(exercise.id, finishedAt) }
         }
 
-        workoutDao.addWorkoutSession(
-            exercises = completedExercises.map { it.first.exercise.toEntity(finishedAt) },
-            workout = newWorkoutEntity(id = session.id, now = session.startedAt, endedAt = finishedAt),
-            workoutExercises = workoutExercises,
-            sets = sets
-        )
-        syncQueueWriter.enqueue(
-            entityType = EntityTypeWorkout,
-            entityId = session.id,
-            operation = OperationUpsert,
-            payloadJson = syncPayloadFactory.workoutSession(session, OperationUpsert)
-        )
+        database.withTransaction {
+            workoutDao.addWorkoutSession(
+                exercises = completedExercises.map { it.first.exercise.toEntity(finishedAt) },
+                workout = newWorkoutEntity(id = session.id, now = session.startedAt, endedAt = finishedAt),
+                workoutExercises = workoutExercises,
+                sets = sets
+            )
+            syncQueueWriter.enqueueOnly(
+                entityType = EntityTypeWorkout,
+                entityId = session.id,
+                operation = OperationUpsert,
+                payloadJson = syncPayloadFactory.workoutSession(
+                    session.copy(exercises = completedExercises.map { (exercise, completedSets) -> exercise.copy(sets = completedSets) }),
+                    OperationUpsert
+                )
+            )
+        }
+        syncQueueWriter.schedule()
         return AppResult.Success(Unit)
     }
 
@@ -222,17 +235,20 @@ class LocalWorkoutRepository @Inject constructor(
     override suspend fun deleteWorkout(entry: WorkoutLogEntry): AppResult<Unit> {
         val workoutExerciseIds = workoutDao.workoutExercisesForWorkout(entry.id).map { it.id }
         if (workoutExerciseIds.isEmpty()) return AppResult.Failure(AppError.NotFound)
-        workoutDao.softDeleteWorkoutCascade(
-            workoutId = entry.id,
-            workoutExerciseIds = workoutExerciseIds,
-            deletedAt = System.currentTimeMillis()
-        )
-        syncQueueWriter.enqueue(
-            entityType = EntityTypeWorkout,
-            entityId = entry.id,
-            operation = OperationDelete,
-            payloadJson = syncPayloadFactory.workout(entry, OperationDelete)
-        )
+        database.withTransaction {
+            workoutDao.softDeleteWorkoutCascade(
+                workoutId = entry.id,
+                workoutExerciseIds = workoutExerciseIds,
+                deletedAt = System.currentTimeMillis()
+            )
+            syncQueueWriter.enqueueOnly(
+                entityType = EntityTypeWorkout,
+                entityId = entry.id,
+                operation = OperationDelete,
+                payloadJson = syncPayloadFactory.workout(entry, OperationDelete)
+            )
+        }
+        syncQueueWriter.schedule()
         return AppResult.Success(Unit)
     }
 

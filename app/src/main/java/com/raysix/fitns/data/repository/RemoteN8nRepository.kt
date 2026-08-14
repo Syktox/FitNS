@@ -3,6 +3,7 @@ package com.raysix.fitns.data.repository
 import com.raysix.fitns.core.model.AppError
 import com.raysix.fitns.core.model.AppResult
 import com.raysix.fitns.core.network.N8nApiService
+import com.raysix.fitns.core.network.N8nServiceFactory
 import com.raysix.fitns.core.network.BarcodeRequest
 import com.raysix.fitns.core.network.ImageAnalysisItem
 import com.raysix.fitns.core.network.ImageAnalysisRequest
@@ -13,11 +14,7 @@ import com.raysix.fitns.domain.model.FoodProductLookup
 import com.raysix.fitns.domain.model.MealAnalysisItem
 import com.raysix.fitns.domain.model.MealAnalysisResult
 import com.raysix.fitns.domain.model.NutritionFacts
-import com.squareup.moshi.Moshi
-import okhttp3.OkHttpClient
 import retrofit2.HttpException
-import retrofit2.Retrofit
-import retrofit2.converter.moshi.MoshiConverterFactory
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.time.Instant
@@ -25,11 +22,10 @@ import java.util.UUID
 import javax.inject.Inject
 
 class RemoteN8nRepository @Inject constructor(
-    private val client: OkHttpClient,
-    private val moshi: Moshi
+    private val serviceFactory: N8nServiceFactory
 ) : N8nRepository {
     override suspend fun testConnection(baseUrl: String, bearerToken: String?): AppResult<Unit> {
-        val normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+        val normalizedBaseUrl = serviceFactory.normalizeBaseUrl(baseUrl)
             ?: return AppResult.Failure(AppError.Validation("Enter a valid HTTPS base URL."))
 
         return try {
@@ -58,7 +54,7 @@ class RemoteN8nRepository @Inject constructor(
         bearerToken: String?,
         barcode: String
     ): AppResult<FoodProductLookup> {
-        val normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+        val normalizedBaseUrl = serviceFactory.normalizeBaseUrl(baseUrl)
             ?: return AppResult.Failure(AppError.Validation("Enter a valid HTTPS base URL."))
         val cleanBarcode = barcode.trim()
         if (cleanBarcode.isBlank()) {
@@ -107,7 +103,7 @@ class RemoteN8nRepository @Inject constructor(
         imageBase64: String,
         consentGranted: Boolean
     ): AppResult<MealAnalysisResult> {
-        val normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+        val normalizedBaseUrl = serviceFactory.normalizeBaseUrl(baseUrl)
             ?: return AppResult.Failure(AppError.Validation("Enter a valid HTTPS base URL."))
         if (!consentGranted) {
             return AppResult.Failure(AppError.Validation("Consent is required before the photo is uploaded."))
@@ -159,18 +155,7 @@ class RemoteN8nRepository @Inject constructor(
     }
 
     private fun serviceFor(baseUrl: String): N8nApiService {
-        return Retrofit.Builder()
-            .baseUrl(baseUrl)
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .build()
-            .create(N8nApiService::class.java)
-    }
-
-    private fun normalizeBaseUrl(baseUrl: String): String? {
-        val trimmed = baseUrl.trim()
-        if (!trimmed.startsWith("https://")) return null
-        return if (trimmed.endsWith("/")) trimmed else "$trimmed/"
+        return serviceFactory.serviceFor(baseUrl)
     }
 
     private fun String?.asAuthorizationHeader(): String? {

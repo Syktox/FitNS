@@ -1,19 +1,26 @@
 package com.raysix.fitns.feature.settings
 
+import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.raysix.fitns.core.auth.GoogleAuthController
 import com.raysix.fitns.core.model.AppError
 import com.raysix.fitns.core.model.AppResult
 import com.raysix.fitns.core.settings.DefaultN8nBaseUrl
 import com.raysix.fitns.core.settings.N8nConnectionSettings
 import com.raysix.fitns.core.sync.SyncScheduler
+import com.raysix.fitns.core.network.N8nServiceFactory
 import com.raysix.fitns.data.local.dao.SyncQueueDao
 import com.raysix.fitns.domain.model.BodyWeightLogEntry
 import com.raysix.fitns.domain.model.FoodLogEntry
 import com.raysix.fitns.domain.model.NutritionGoal
 import com.raysix.fitns.domain.model.UserProfile
 import com.raysix.fitns.domain.model.WorkoutLogEntry
+import com.raysix.fitns.domain.model.GoogleAccount
+import com.raysix.fitns.domain.repository.AppearanceMode
 import com.raysix.fitns.domain.repository.BodyWeightRepository
+import com.raysix.fitns.domain.repository.BottomNavigationDestination
 import com.raysix.fitns.domain.repository.N8nRepository
 import com.raysix.fitns.domain.repository.NutritionRepository
 import com.raysix.fitns.domain.repository.ProfileRepository
@@ -21,6 +28,8 @@ import com.raysix.fitns.domain.repository.SettingsRepository
 import com.raysix.fitns.domain.repository.WorkoutRepository
 import com.squareup.moshi.Moshi
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,18 +37,28 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 
 data class SettingsUiState(
     val n8nSettings: N8nConnectionSettings = N8nConnectionSettings(baseUrl = DefaultN8nBaseUrl),
     val temporaryPhotosOnly: Boolean = true,
     val pendingSyncCount: Int = 0,
+    val failedSyncCount: Int = 0,
+    val latestSyncError: String? = null,
     val connectionStatus: String = "Not tested",
     val testingConnection: Boolean = false,
     val bearerTokenInput: String = "",
     val bearerTokenConfigured: Boolean = false,
+    val googleAccount: GoogleAccount? = null,
+    val googleSignInConfigured: Boolean = false,
+    val appearanceMode: AppearanceMode = AppearanceMode.System,
+    val bottomNavigation: List<BottomNavigationDestination> = BottomNavigationDestination.Default,
     val exportStatus: String? = null,
-    val exportPreview: String? = null
+    val exportFilePath: String? = null
 )
 
 @HiltViewModel
@@ -52,6 +71,9 @@ class SettingsViewModel @Inject constructor(
     private val workoutRepository: WorkoutRepository,
     private val bodyWeightRepository: BodyWeightRepository,
     private val profileRepository: ProfileRepository,
+    private val googleAuthController: GoogleAuthController,
+    private val n8nServiceFactory: N8nServiceFactory,
+    @ApplicationContext private val context: Context,
     moshi: Moshi
 ) : ViewModel() {
     private val connectionStatus = MutableStateFlow("Not tested")
@@ -59,13 +81,15 @@ class SettingsViewModel @Inject constructor(
     private val bearerTokenInput = MutableStateFlow("")
     private val bearerTokenConfigured = MutableStateFlow(false)
     private val exportStatus = MutableStateFlow<String?>(null)
-    private val exportPreview = MutableStateFlow<String?>(null)
+    private val exportFilePath = MutableStateFlow<String?>(null)
+    private val baseUrlDraft = MutableStateFlow(DefaultN8nBaseUrl)
+    private val navigationUpdateMutex = Mutex()
     private val exportAdapter = moshi.adapter(LocalDataExport::class.java).indent("  ")
     private val connectionState = combine(connectionStatus, testingConnection, bearerTokenInput, bearerTokenConfigured) { status, testing, tokenInput, tokenConfigured ->
         ConnectionState(status = status, testing = testing, tokenInput = tokenInput, tokenConfigured = tokenConfigured)
     }
-    private val exportState = combine(exportStatus, exportPreview) { status, preview ->
-        status to preview
+    private val exportState = combine(exportStatus, exportFilePath) { status, filePath ->
+        status to filePath
     }
 
     val uiState: StateFlow<SettingsUiState> = combine(
@@ -73,18 +97,38 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.observeTemporaryPhotosOnly(),
         syncQueueDao.observePendingCount(),
         connectionState,
-        exportState
-    ) { n8nSettings, temporaryPhotosOnly, pendingSyncCount, connection, export ->
+        exportState,
+        settingsRepository.observeGoogleAccount(),
+        settingsRepository.observeAppearanceMode(),
+        baseUrlDraft,
+        syncQueueDao.observeConflictCount(),
+        syncQueueDao.observeLatestConflictError(),
+        settingsRepository.observeBottomNavigation()
+    ) { values ->
+        val n8nSettings = values[0] as N8nConnectionSettings
+        val temporaryPhotosOnly = values[1] as Boolean
+        val pendingSyncCount = values[2] as Int
+        val connection = values[3] as ConnectionState
+        @Suppress("UNCHECKED_CAST")
+        val export = values[4] as Pair<String?, String?>
+        @Suppress("UNCHECKED_CAST")
+        val bottomNavigation = values[10] as List<BottomNavigationDestination>
         SettingsUiState(
-            n8nSettings = n8nSettings,
+            n8nSettings = n8nSettings.copy(baseUrl = values[7] as String),
             temporaryPhotosOnly = temporaryPhotosOnly,
             pendingSyncCount = pendingSyncCount,
+            failedSyncCount = values[8] as Int,
+            latestSyncError = values[9] as String?,
             connectionStatus = connection.status,
             testingConnection = connection.testing,
             bearerTokenInput = connection.tokenInput,
             bearerTokenConfigured = connection.tokenConfigured,
+            googleAccount = values[5] as GoogleAccount?,
+            googleSignInConfigured = googleAuthController.isConfigured,
+            appearanceMode = values[6] as AppearanceMode,
+            bottomNavigation = bottomNavigation,
             exportStatus = export.first,
-            exportPreview = export.second
+            exportFilePath = export.second
         )
     }.stateIn(
         scope = viewModelScope,
@@ -95,13 +139,25 @@ class SettingsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             bearerTokenConfigured.value = !settingsRepository.readBearerToken().isNullOrBlank()
+            baseUrlDraft.value = settingsRepository.observeN8nSettings().first().baseUrl
         }
     }
 
     fun updateN8nBaseUrl(baseUrl: String) {
+        baseUrlDraft.value = baseUrl
+        connectionStatus.value = "Not tested"
+    }
+
+    fun saveN8nBaseUrl() {
         viewModelScope.launch {
-            settingsRepository.updateN8nBaseUrl(baseUrl)
-            connectionStatus.value = "Not tested"
+            val url = n8nServiceFactory.normalizeBaseUrl(baseUrlDraft.value)
+            if (url == null) {
+                connectionStatus.value = "Enter a valid HTTPS base URL."
+                return@launch
+            }
+            settingsRepository.updateN8nBaseUrl(url)
+            syncQueueDao.requeueConfigurationFailures(System.currentTimeMillis())
+            connectionStatus.value = "Connection address saved. Test it before syncing."
         }
     }
 
@@ -119,11 +175,14 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val token = bearerTokenInput.value.trim()
             if (token.isBlank()) {
-                settingsRepository.clearBearerToken()
-                bearerTokenConfigured.value = false
-                connectionStatus.value = "Bearer token cleared"
+                connectionStatus.value = if (bearerTokenConfigured.value) {
+                    "Enter a replacement token to update the stored credential."
+                } else {
+                    "Enter a bearer token first."
+                }
             } else {
                 settingsRepository.setBearerToken(token)
+                syncQueueDao.requeueConfigurationFailures(System.currentTimeMillis())
                 bearerTokenConfigured.value = true
                 bearerTokenInput.value = ""
                 connectionStatus.value = "Bearer token saved securely"
@@ -135,6 +194,47 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.updateTemporaryPhotosOnly(enabled)
         }
+    }
+
+    fun updateAppearanceMode(mode: AppearanceMode) {
+        viewModelScope.launch { settingsRepository.updateAppearanceMode(mode) }
+    }
+
+    fun updateBottomNavigation(destination: BottomNavigationDestination, selected: Boolean) {
+        viewModelScope.launch {
+            navigationUpdateMutex.withLock {
+                val current = settingsRepository.observeBottomNavigation().first()
+                val updated = when {
+                    selected && destination !in current && current.size < BottomNavigationDestination.MaxSelected -> current + destination
+                    !selected && destination in current && current.size > 1 -> current - destination
+                    else -> current
+                }
+                if (updated != current) {
+                    settingsRepository.updateBottomNavigation(updated)
+                }
+            }
+        }
+    }
+
+    fun resetBottomNavigation() {
+        viewModelScope.launch {
+            navigationUpdateMutex.withLock {
+                settingsRepository.updateBottomNavigation(BottomNavigationDestination.Default)
+            }
+        }
+    }
+
+    fun createSignInIntent(): Intent? = googleAuthController.createSignInIntent()
+
+    fun handleSignInResult(data: Intent?): Boolean {
+        val account = googleAuthController.handleSignInResult(data) ?: return false
+        viewModelScope.launch { settingsRepository.saveGoogleAccount(account) }
+        return true
+    }
+
+    fun signOut() {
+        googleAuthController.signOut()
+        viewModelScope.launch { settingsRepository.clearGoogleAccount() }
     }
 
     fun testConnection() {
@@ -154,7 +254,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun retrySyncNow() {
-        syncScheduler.schedule()
+        viewModelScope.launch {
+            syncQueueDao.requeueConfigurationFailures(System.currentTimeMillis())
+            syncScheduler.schedule()
+        }
     }
 
     fun generateLocalJsonExport() {
@@ -167,9 +270,14 @@ class SettingsViewModel @Inject constructor(
                 workouts = workoutRepository.observeHistory().first(),
                 bodyWeights = bodyWeightRepository.observeHistory().first()
             )
-            val json = exportAdapter.toJson(export)
-            exportStatus.value = "JSON export prepared (${json.length} characters)"
-            exportPreview.value = json.take(1200)
+            val file = withContext(Dispatchers.IO) {
+                val json = exportAdapter.toJson(export)
+                File(context.cacheDir, "fitns-export-${System.currentTimeMillis()}.json").apply {
+                    writeText(json)
+                }
+            }
+            exportStatus.value = "Your export is ready to share."
+            exportFilePath.value = file.absolutePath
         }
     }
 

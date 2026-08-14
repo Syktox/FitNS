@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ProfileUiState(
+    val isLoaded: Boolean = false,
     val profile: UserProfile = UserProfile(),
     val nutritionGoal: NutritionGoal = NutritionGoal(
         caloriesKcal = 2300.0,
@@ -44,6 +45,7 @@ class ProfileViewModel @Inject constructor(
         errorMessage
     ) { profile, goal, status, error ->
         ProfileUiState(
+            isLoaded = true,
             profile = profile,
             nutritionGoal = goal,
             statusMessage = status,

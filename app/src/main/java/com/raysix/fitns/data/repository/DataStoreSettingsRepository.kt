@@ -11,6 +11,8 @@ import com.raysix.fitns.core.settings.N8nConnectionSettings
 import com.raysix.fitns.core.settings.fitNsSettingsDataStore
 import com.raysix.fitns.domain.model.GoogleAccount
 import com.raysix.fitns.domain.repository.SettingsRepository
+import com.raysix.fitns.domain.repository.AppearanceMode
+import com.raysix.fitns.domain.repository.BottomNavigationDestination
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -52,6 +54,28 @@ class DataStoreSettingsRepository @Inject constructor(
                     photoUrl = preferences[GoogleAccountPhotoUrlKey]
                 )
             }
+        }
+    }
+
+    override fun observeAppearanceMode(): Flow<AppearanceMode> {
+        return context.fitNsSettingsDataStore.data.map { preferences ->
+            preferences[AppearanceModeKey]
+                ?.let { stored -> AppearanceMode.entries.firstOrNull { it.name == stored } }
+                ?: AppearanceMode.System
+        }
+    }
+
+    override fun observeBottomNavigation(): Flow<List<BottomNavigationDestination>> {
+        return context.fitNsSettingsDataStore.data.map { preferences ->
+            preferences[BottomNavigationKey]
+                ?.split(",")
+                ?.mapNotNull { stored ->
+                    BottomNavigationDestination.entries.firstOrNull { it.name == stored }
+                }
+                ?.distinct()
+                ?.take(BottomNavigationDestination.MaxSelected)
+                ?.takeIf { it.isNotEmpty() }
+                ?: BottomNavigationDestination.Default
         }
     }
 
@@ -98,6 +122,22 @@ class DataStoreSettingsRepository @Inject constructor(
         }
     }
 
+    override suspend fun updateAppearanceMode(mode: AppearanceMode) {
+        context.fitNsSettingsDataStore.edit { preferences ->
+            preferences[AppearanceModeKey] = mode.name
+        }
+    }
+
+    override suspend fun updateBottomNavigation(destinations: List<BottomNavigationDestination>) {
+        val sanitized = destinations
+            .distinct()
+            .take(BottomNavigationDestination.MaxSelected)
+            .ifEmpty { BottomNavigationDestination.Default }
+        context.fitNsSettingsDataStore.edit { preferences ->
+            preferences[BottomNavigationKey] = sanitized.joinToString(",") { it.name }
+        }
+    }
+
     override suspend fun setBearerToken(token: String) {
         tokenStore.save(token.trim())
     }
@@ -116,5 +156,7 @@ class DataStoreSettingsRepository @Inject constructor(
         val GoogleAccountEmailKey = stringPreferencesKey("google_account_email")
         val GoogleAccountNameKey = stringPreferencesKey("google_account_name")
         val GoogleAccountPhotoUrlKey = stringPreferencesKey("google_account_photo_url")
+        val AppearanceModeKey = stringPreferencesKey("appearance_mode")
+        val BottomNavigationKey = stringPreferencesKey("bottom_navigation")
     }
 }

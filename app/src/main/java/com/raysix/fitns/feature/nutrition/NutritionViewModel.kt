@@ -203,7 +203,7 @@ class NutritionViewModel @Inject constructor(
             val settings = settingsRepository.observeN8nSettings().first()
             val result = n8nRepository.findProductByBarcode(
                 baseUrl = settings.baseUrl,
-                bearerToken = null,
+                bearerToken = settingsRepository.readBearerToken(),
                 barcode = barcode
             )
             barcodeLookup.value = when (result) {

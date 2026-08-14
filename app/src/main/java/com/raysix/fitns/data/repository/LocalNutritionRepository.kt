@@ -27,36 +27,54 @@ import com.raysix.fitns.domain.usecase.NutritionCalculator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.time.LocalDate
 import java.time.ZoneId
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import javax.inject.Inject
+import com.raysix.fitns.data.local.FitNsDatabase
+import androidx.room.withTransaction
+
+private const val DateRefreshIntervalMillis = 60_000L
 
 class LocalNutritionRepository @Inject constructor(
     private val foodDao: FoodDao,
+    private val database: FitNsDatabase,
     private val nutritionCalculator: NutritionCalculator,
     private val syncQueueWriter: SyncQueueWriter,
     private val syncPayloadFactory: SyncPayloadFactory,
     private val profileRepository: ProfileRepository,
     private val mealScaler: MealScaler
 ) : NutritionRepository {
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeToday(): Flow<DailyNutritionDashboard> {
-        val zone = ZoneId.systemDefault()
-        val start = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
-        val end = LocalDate.now(zone).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-        return combine(
-            foodDao.observeFoodEntriesForPeriod(start, end),
-            foodDao.observeDailySummary(start),
-            profileRepository.observeNutritionGoal()
-        ) { entities, summary, goal ->
-            val entries = entities.map { it.toDomain() }
-            DailyNutritionDashboard(
-                goal = goal,
-                total = nutritionCalculator.summarize(entries),
-                waterMilliliters = summary?.waterMilliliters ?: 0.0,
-                entries = entries
-            )
+        return flow {
+            while (true) {
+                val zone = ZoneId.systemDefault()
+                emit(zone to LocalDate.now(zone))
+                delay(DateRefreshIntervalMillis)
+            }
+        }.distinctUntilChanged().flatMapLatest { (zone, date) ->
+            val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
+            val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            combine(
+                foodDao.observeFoodEntriesForPeriod(start, end),
+                foodDao.observeDailySummary(start),
+                profileRepository.observeNutritionGoal()
+            ) { entities, summary, goal ->
+                val entries = entities.map { it.toDomain() }
+                DailyNutritionDashboard(
+                    goal = goal,
+                    total = nutritionCalculator.summarize(entries),
+                    waterMilliliters = summary?.waterMilliliters ?: 0.0,
+                    entries = entries
+                )
+            }
         }
     }
 
@@ -112,13 +130,16 @@ class LocalNutritionRepository @Inject constructor(
     override suspend fun addFood(entry: FoodLogEntry): AppResult<Unit> {
         val error = validate(entry)
         if (error != null) return AppResult.Failure(error)
-        foodDao.upsertFoodEntry(entry.toEntity())
-        syncQueueWriter.enqueue(
-            entityType = EntityTypeFoodEntry,
-            entityId = entry.id,
-            operation = OperationUpsert,
-            payloadJson = syncPayloadFactory.foodEntry(entry, OperationUpsert)
-        )
+        database.withTransaction {
+            foodDao.upsertFoodEntry(entry.toEntity())
+            syncQueueWriter.enqueueOnly(
+                entityType = EntityTypeFoodEntry,
+                entityId = entry.id,
+                operation = OperationUpsert,
+                payloadJson = syncPayloadFactory.foodEntry(entry, OperationUpsert)
+            )
+        }
+        syncQueueWriter.schedule()
         return AppResult.Success(Unit)
     }
 
@@ -128,13 +149,16 @@ class LocalNutritionRepository @Inject constructor(
         val error = validate(entry)
         if (error != null) return AppResult.Failure(error)
         val updated = entry.copy(consumedAt = existing.consumedAt)
-        foodDao.upsertFoodEntry(updated.toEntity())
-        syncQueueWriter.enqueue(
-            entityType = EntityTypeFoodEntry,
-            entityId = updated.id,
-            operation = OperationUpsert,
-            payloadJson = syncPayloadFactory.foodEntry(updated, OperationUpsert)
-        )
+        database.withTransaction {
+            foodDao.upsertFoodEntry(updated.toEntity())
+            syncQueueWriter.enqueueOnly(
+                entityType = EntityTypeFoodEntry,
+                entityId = updated.id,
+                operation = OperationUpsert,
+                payloadJson = syncPayloadFactory.foodEntry(updated, OperationUpsert)
+            )
+        }
+        syncQueueWriter.schedule()
         return AppResult.Success(Unit)
     }
 
@@ -266,22 +290,22 @@ class LocalNutritionRepository @Inject constructor(
     override suspend fun copyEntries(entries: List<FoodLogEntry>, mealType: MealType?): AppResult<Unit> {
         if (entries.isEmpty()) return AppResult.Failure(AppError.Validation("No foods are available to copy."))
         val now = System.currentTimeMillis()
-        entries.forEach { entry ->
-            val copied = entry.copy(
-                id = UUID.randomUUID().toString(),
-                mealType = mealType ?: entry.mealType,
-                consumedAt = now
-            )
-            val error = validate(copied)
-            if (error != null) return AppResult.Failure(error)
-            foodDao.upsertFoodEntry(copied.toEntity(now))
-            syncQueueWriter.enqueue(
-                entityType = EntityTypeFoodEntry,
-                entityId = copied.id,
-                operation = OperationUpsert,
-                payloadJson = syncPayloadFactory.foodEntry(copied, OperationUpsert)
-            )
+        val copies = entries.map { entry ->
+            entry.copy(id = UUID.randomUUID().toString(), mealType = mealType ?: entry.mealType, consumedAt = now)
         }
+        copies.firstNotNullOfOrNull(::validate)?.let { return AppResult.Failure(it) }
+        database.withTransaction {
+            copies.forEach { copied ->
+                foodDao.upsertFoodEntry(copied.toEntity(now))
+                syncQueueWriter.enqueueOnly(
+                    entityType = EntityTypeFoodEntry,
+                    entityId = copied.id,
+                    operation = OperationUpsert,
+                    payloadJson = syncPayloadFactory.foodEntry(copied, OperationUpsert)
+                )
+            }
+        }
+        syncQueueWriter.schedule()
         return AppResult.Success(Unit)
     }
 
@@ -321,16 +345,34 @@ class LocalNutritionRepository @Inject constructor(
         return AppResult.Success(Unit)
     }
 
+    override suspend fun removeWater(milliliters: Double): AppResult<Unit> {
+        if (milliliters <= 0.0) return AppResult.Failure(AppError.Validation("Water amount must be greater than zero."))
+        val zone = ZoneId.systemDefault()
+        val dayStartMillis = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
+        val existing = foodDao.findDailySummary(dayStartMillis) ?: return AppResult.Success(Unit)
+        foodDao.upsertDailySummary(
+            existing.copy(
+                waterMilliliters = (existing.waterMilliliters - milliliters).coerceAtLeast(0.0),
+                updatedAt = System.currentTimeMillis(),
+                syncStatus = SyncStatus.PendingSync
+            )
+        )
+        return AppResult.Success(Unit)
+    }
+
     override suspend fun deleteFood(entry: FoodLogEntry): AppResult<Unit> {
         val existing = foodDao.findFoodEntry(entry.id)?.toDomain()
             ?: return AppResult.Failure(AppError.NotFound)
-        foodDao.softDeleteFoodEntry(entry.id, System.currentTimeMillis())
-        syncQueueWriter.enqueue(
-            entityType = EntityTypeFoodEntry,
-            entityId = entry.id,
-            operation = OperationDelete,
-            payloadJson = syncPayloadFactory.foodEntry(existing, OperationDelete)
-        )
+        database.withTransaction {
+            foodDao.softDeleteFoodEntry(entry.id, System.currentTimeMillis())
+            syncQueueWriter.enqueueOnly(
+                entityType = EntityTypeFoodEntry,
+                entityId = entry.id,
+                operation = OperationDelete,
+                payloadJson = syncPayloadFactory.foodEntry(existing, OperationDelete)
+            )
+        }
+        syncQueueWriter.schedule()
         return AppResult.Success(Unit)
     }
 
