@@ -141,7 +141,6 @@ gradle.taskGraph.whenReady {
             if (releaseKeystorePassword.isNullOrBlank()) add("ANDROID_KEYSTORE_PASSWORD")
             if (releaseKeyAlias.isNullOrBlank()) add("ANDROID_KEY_ALIAS")
             if (releaseKeyPassword.isNullOrBlank()) add("ANDROID_KEY_PASSWORD")
-            if (releaseGoogleWebClientId.isBlank()) add("GOOGLE_WEB_CLIENT_ID")
         }
         if (missingConfiguration.isNotEmpty()) {
             throw GradleException(
