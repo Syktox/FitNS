@@ -59,7 +59,7 @@ class LocalBodyWeightRepository @Inject constructor(
 
     private fun validate(entry: BodyWeightLogEntry): AppError? {
         return when {
-            entry.weightKg <= 0.0 -> AppError.Validation("Weight must be greater than zero.")
+            !entry.weightKg.isFinite() || entry.weightKg <= 0.0 -> AppError.Validation("Weight must be a finite number greater than zero.")
             entry.weightKg > 500.0 -> AppError.Validation("Weight looks implausibly high.")
             else -> null
         }

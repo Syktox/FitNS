@@ -14,11 +14,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 
 private const val WideThresholdDp = 700
+private const val CompactHeightThresholdDp = 500
+private val ReadableContentMaxWidth = 860.dp
+private val TwoPaneContentMaxWidth = 1280.dp
 
 val LocalFloatingNavigationClearance = staticCompositionLocalOf { 0.dp }
 
@@ -31,6 +35,10 @@ fun isWideScreen(): Boolean = LocalConfiguration.current.screenWidthDp >= WideTh
 
 @Composable
 fun isCompactScreen(): Boolean = !isWideScreen()
+
+/** True for short windows such as a phone in landscape or a split-screen pane. */
+@Composable
+fun isCompactHeight(): Boolean = LocalConfiguration.current.screenHeightDp < CompactHeightThresholdDp
 
 /**
  * Shared horizontal padding for a content column depending on screen width.
@@ -50,16 +58,21 @@ fun AdaptiveColumn(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val bottomClearance = LocalFloatingNavigationClearance.current
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .widthIn(max = 860.dp)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = adaptiveHorizontalPadding())
-            .padding(bottom = bottomClearance),
-        verticalArrangement = verticalArrangement,
-        content = content
-    )
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = ReadableContentMaxWidth)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = adaptiveHorizontalPadding())
+                .padding(bottom = bottomClearance + 20.dp),
+            verticalArrangement = verticalArrangement,
+            content = content
+        )
+    }
 }
 
 /**
@@ -75,52 +88,58 @@ fun AdaptiveTwoColumn(
     side: @Composable ColumnScope.() -> Unit
 ) {
     if (isWideScreen()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopCenter
         ) {
-            Box(
+            Column(
                 modifier = Modifier
+                    .widthIn(max = TwoPaneContentMaxWidth)
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = adaptiveHorizontalPadding())
+                    .padding(bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 header?.invoke()
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = adaptiveHorizontalPadding()),
-                horizontalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    main()
-                }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    side()
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        main()
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        side()
+                    }
                 }
             }
         }
     } else {
         val bottomClearance = LocalFloatingNavigationClearance.current
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = adaptiveHorizontalPadding())
-                .padding(bottom = bottomClearance),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopCenter
         ) {
-            header?.invoke()
-            main()
-            side()
+            Column(
+                modifier = Modifier
+                    .widthIn(max = ReadableContentMaxWidth)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = adaptiveHorizontalPadding())
+                    .padding(bottom = bottomClearance + 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                header?.invoke()
+                main()
+                side()
+            }
         }
     }
 }
@@ -137,49 +156,55 @@ fun AdaptiveGutterLayout(
     main: @Composable ColumnScope.() -> Unit
 ) {
     if (isWideScreen()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopCenter
         ) {
-            Box(
+            Column(
                 modifier = Modifier
+                    .widthIn(max = TwoPaneContentMaxWidth)
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = adaptiveHorizontalPadding())
+                    .padding(bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 header?.invoke()
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = adaptiveHorizontalPadding()),
-                horizontalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                Box(modifier = Modifier.weight(gutterWidthFraction)) {
-                    gutter()
-                }
-                Column(
-                    modifier = Modifier.weight(1f - gutterWidthFraction),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    main()
+                    Box(modifier = Modifier.weight(gutterWidthFraction)) {
+                        gutter()
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f - gutterWidthFraction),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        main()
+                    }
                 }
             }
         }
     } else {
         val bottomClearance = LocalFloatingNavigationClearance.current
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = adaptiveHorizontalPadding())
-                .padding(bottom = bottomClearance),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopCenter
         ) {
-            header?.invoke()
-            gutter()
-            main()
+            Column(
+                modifier = Modifier
+                    .widthIn(max = ReadableContentMaxWidth)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = adaptiveHorizontalPadding())
+                    .padding(bottom = bottomClearance + 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                header?.invoke()
+                gutter()
+                main()
+            }
         }
     }
 }
@@ -195,8 +220,9 @@ fun BoxScope.AdaptiveBoxContent(
 ) {
     Box(
         modifier = modifier
+            .align(Alignment.TopCenter)
+            .widthIn(max = ReadableContentMaxWidth)
             .fillMaxWidth()
-            .widthIn(max = 860.dp)
     ) {
         content()
     }

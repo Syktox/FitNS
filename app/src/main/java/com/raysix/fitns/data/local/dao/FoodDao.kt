@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.raysix.fitns.data.local.entity.DailyNutritionSummaryEntity
 import com.raysix.fitns.data.local.entity.FoodEntryEntity
 import com.raysix.fitns.data.local.entity.FoodNutrientEntity
@@ -11,6 +12,7 @@ import com.raysix.fitns.data.local.entity.FoodProductEntity
 import com.raysix.fitns.data.local.entity.FoodServingEntity
 import com.raysix.fitns.data.local.entity.SavedMealEntity
 import com.raysix.fitns.data.local.entity.SavedMealItemEntity
+import com.raysix.fitns.data.local.entity.SyncStatus
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -51,11 +53,17 @@ interface FoodDao {
     @Query("SELECT * FROM saved_meal_items WHERE deletedAt IS NULL ORDER BY savedMealId ASC, sortOrder ASC")
     fun observeSavedMealItems(): Flow<List<SavedMealItemEntity>>
 
-    @Query("SELECT * FROM daily_nutrition_summaries WHERE dayStartMillis = :dayStartMillis AND deletedAt IS NULL LIMIT 1")
+    @Query("SELECT * FROM daily_nutrition_summaries WHERE dayStartMillis = :dayStartMillis AND deletedAt IS NULL ORDER BY createdAt ASC, id ASC LIMIT 1")
     fun observeDailySummary(dayStartMillis: Long): Flow<DailyNutritionSummaryEntity?>
 
-    @Query("SELECT * FROM daily_nutrition_summaries WHERE dayStartMillis = :dayStartMillis AND deletedAt IS NULL LIMIT 1")
+    @Query("SELECT COALESCE(SUM(waterMilliliters), 0.0) FROM daily_nutrition_summaries WHERE dayStartMillis = :dayStartMillis AND deletedAt IS NULL")
+    fun observeDailyWaterTotal(dayStartMillis: Long): Flow<Double>
+
+    @Query("SELECT * FROM daily_nutrition_summaries WHERE dayStartMillis = :dayStartMillis AND deletedAt IS NULL ORDER BY createdAt ASC, id ASC LIMIT 1")
     suspend fun findDailySummary(dayStartMillis: Long): DailyNutritionSummaryEntity?
+
+    @Query("SELECT * FROM daily_nutrition_summaries WHERE dayStartMillis = :dayStartMillis AND deletedAt IS NULL ORDER BY createdAt ASC, id ASC")
+    suspend fun findDailySummaries(dayStartMillis: Long): List<DailyNutritionSummaryEntity>
 
     @Query("SELECT * FROM food_entries WHERE id = :id AND deletedAt IS NULL LIMIT 1")
     suspend fun findFoodEntry(id: String): FoodEntryEntity?
@@ -65,6 +73,96 @@ interface FoodDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertDailySummary(summary: DailyNutritionSummaryEntity)
+
+    @Query("DELETE FROM daily_nutrition_summaries WHERE dayStartMillis = :dayStartMillis AND deletedAt IS NULL AND id != :canonicalId")
+    suspend fun deleteDuplicateDailySummaries(dayStartMillis: Long, canonicalId: String)
+
+    @Query(
+        """
+        UPDATE daily_nutrition_summaries
+        SET waterMilliliters = waterMilliliters + :milliliters,
+            updatedAt = :updatedAt,
+            syncStatus = 'PendingSync'
+        WHERE id = (
+            SELECT id FROM daily_nutrition_summaries
+            WHERE dayStartMillis = :dayStartMillis AND deletedAt IS NULL
+            ORDER BY createdAt ASC
+            LIMIT 1
+        )
+        """
+    )
+    suspend fun incrementWater(dayStartMillis: Long, milliliters: Double, updatedAt: Long): Int
+
+    @Query(
+        """
+        UPDATE daily_nutrition_summaries
+        SET waterMilliliters = MAX(waterMilliliters - :milliliters, 0.0),
+            updatedAt = :updatedAt,
+            syncStatus = 'PendingSync'
+        WHERE id = (
+            SELECT id FROM daily_nutrition_summaries
+            WHERE dayStartMillis = :dayStartMillis AND deletedAt IS NULL
+            ORDER BY createdAt ASC
+            LIMIT 1
+        )
+        """
+    )
+    suspend fun decrementWater(dayStartMillis: Long, milliliters: Double, updatedAt: Long)
+
+    @Transaction
+    suspend fun addWaterAtomically(
+        dayStartMillis: Long,
+        milliliters: Double,
+        updatedAt: Long,
+        summaryIfMissing: DailyNutritionSummaryEntity
+    ) {
+        consolidateDailySummaries(dayStartMillis, updatedAt)
+        if (incrementWater(dayStartMillis, milliliters, updatedAt) == 0) {
+            upsertDailySummary(
+                summaryIfMissing.copy(
+                    dayStartMillis = dayStartMillis,
+                    waterMilliliters = milliliters,
+                    updatedAt = updatedAt
+                )
+            )
+        }
+    }
+
+    @Transaction
+    suspend fun removeWaterAtomically(dayStartMillis: Long, milliliters: Double, updatedAt: Long) {
+        consolidateDailySummaries(dayStartMillis, updatedAt)
+        decrementWater(dayStartMillis, milliliters, updatedAt)
+    }
+
+    @Transaction
+    suspend fun consolidateDailySummaries(
+        dayStartMillis: Long,
+        updatedAt: Long
+    ): DailyNutritionSummaryEntity? {
+        val summaries = findDailySummaries(dayStartMillis)
+        if (summaries.size <= 1) return summaries.firstOrNull()
+
+        fun finiteTotal(selector: (DailyNutritionSummaryEntity) -> Double): Double {
+            return summaries.sumOf { summary ->
+                selector(summary).takeIf { it.isFinite() } ?: 0.0
+            }
+        }
+
+        val canonical = summaries.first().copy(
+            caloriesKcal = finiteTotal(DailyNutritionSummaryEntity::caloriesKcal),
+            proteinGrams = finiteTotal(DailyNutritionSummaryEntity::proteinGrams),
+            carbohydratesGrams = finiteTotal(DailyNutritionSummaryEntity::carbohydratesGrams),
+            fatGrams = finiteTotal(DailyNutritionSummaryEntity::fatGrams),
+            fiberGrams = finiteTotal(DailyNutritionSummaryEntity::fiberGrams),
+            waterMilliliters = finiteTotal(DailyNutritionSummaryEntity::waterMilliliters).coerceAtLeast(0.0),
+            updatedAt = maxOf(updatedAt, summaries.maxOf(DailyNutritionSummaryEntity::updatedAt)),
+            syncStatus = SyncStatus.PendingSync,
+            serverVersion = null
+        )
+        upsertDailySummary(canonical)
+        deleteDuplicateDailySummaries(dayStartMillis, canonical.id)
+        return canonical
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertFoodProduct(product: FoodProductEntity)

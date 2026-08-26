@@ -17,7 +17,10 @@ class PersonalRecordDetector @Inject constructor(
             val currentSets = activeExercise.sets.filter {
                 it.completedAt != null && it.setType != WorkoutSetType.WarmUp
             }
-            val historicalSets = existingByExercise[activeExercise.exercise.id].orEmpty().flatMap { it.sets }
+            val historicalSets = existingByExercise[activeExercise.exercise.id]
+                .orEmpty()
+                .flatMap { it.sets }
+                .filter { it.setType != WorkoutSetType.WarmUp }
             val events = mutableListOf<PersonalRecordEvent>()
 
             val currentMaxWeight = currentSets.maxOfOrNull { it.weightKg }
@@ -74,7 +77,13 @@ class PersonalRecordDetector @Inject constructor(
         val historicalBest = history
             .groupBy { it.id }
             .values
-            .maxOfOrNull { entries -> entries.sumOf { it.volumeKg } } ?: 0.0
+            .maxOfOrNull { entries ->
+                entries.sumOf { entry ->
+                    entry.sets
+                        .filter { it.setType != WorkoutSetType.WarmUp }
+                        .sumOf { set -> set.weightKg * set.repetitions * set.sets }
+                }
+            } ?: 0.0
 
         if (currentVolume <= historicalBest || currentVolume <= 0.0) return emptyList()
         return listOf(

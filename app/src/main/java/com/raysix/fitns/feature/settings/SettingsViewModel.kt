@@ -1,6 +1,5 @@
 package com.raysix.fitns.feature.settings
 
-import android.content.Context
 import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +10,7 @@ import com.raysix.fitns.core.settings.DefaultN8nBaseUrl
 import com.raysix.fitns.core.settings.N8nConnectionSettings
 import com.raysix.fitns.core.sync.SyncScheduler
 import com.raysix.fitns.core.network.N8nServiceFactory
+import com.raysix.fitns.data.local.FitNsCacheManager
 import com.raysix.fitns.data.local.dao.SyncQueueDao
 import com.raysix.fitns.domain.model.BodyWeightLogEntry
 import com.raysix.fitns.domain.model.FoodLogEntry
@@ -21,6 +21,7 @@ import com.raysix.fitns.domain.model.GoogleAccount
 import com.raysix.fitns.domain.repository.AppearanceMode
 import com.raysix.fitns.domain.repository.BodyWeightRepository
 import com.raysix.fitns.domain.repository.BottomNavigationDestination
+import com.raysix.fitns.domain.repository.LocalDataDeletionRepository
 import com.raysix.fitns.domain.repository.N8nRepository
 import com.raysix.fitns.domain.repository.NutritionRepository
 import com.raysix.fitns.domain.repository.ProfileRepository
@@ -28,19 +29,20 @@ import com.raysix.fitns.domain.repository.SettingsRepository
 import com.raysix.fitns.domain.repository.WorkoutRepository
 import com.squareup.moshi.Moshi
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.File
 import javax.inject.Inject
 
 data class SettingsUiState(
@@ -59,8 +61,14 @@ data class SettingsUiState(
     val appearanceMode: AppearanceMode = AppearanceMode.System,
     val bottomNavigation: List<BottomNavigationDestination> = BottomNavigationDestination.Default,
     val exportStatus: String? = null,
-    val exportFilePath: String? = null
+    val exportFilePath: String? = null,
+    val deletingLocalData: Boolean = false,
+    val localDataDeletionError: String? = null
 )
+
+sealed interface SettingsEvent {
+    data object NavigateToOnboarding : SettingsEvent
+}
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -74,7 +82,8 @@ class SettingsViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val googleAuthController: GoogleAuthController,
     private val n8nServiceFactory: N8nServiceFactory,
-    @ApplicationContext private val context: Context,
+    private val localDataDeletionRepository: LocalDataDeletionRepository,
+    private val cacheManager: FitNsCacheManager,
     moshi: Moshi
 ) : ViewModel() {
     private val connectionStatus = MutableStateFlow("Not tested")
@@ -84,6 +93,8 @@ class SettingsViewModel @Inject constructor(
     private val exportStatus = MutableStateFlow<String?>(null)
     private val exportFilePath = MutableStateFlow<String?>(null)
     private val baseUrlDraft = MutableStateFlow(DefaultN8nBaseUrl)
+    private val localDataDeletionState = MutableStateFlow(LocalDataDeletionState())
+    private val eventChannel = Channel<SettingsEvent>(Channel.BUFFERED)
     private val navigationUpdateMutex = Mutex()
     private val exportAdapter = moshi.adapter(LocalDataExport::class.java).indent("  ")
     private val connectionState = combine(connectionStatus, testingConnection, bearerTokenInput, bearerTokenConfigured) { status, testing, tokenInput, tokenConfigured ->
@@ -92,6 +103,7 @@ class SettingsViewModel @Inject constructor(
     private val exportState = combine(exportStatus, exportFilePath) { status, filePath ->
         status to filePath
     }
+    val events = eventChannel.receiveAsFlow()
 
     val uiState: StateFlow<SettingsUiState> = combine(
         settingsRepository.observeN8nSettings(),
@@ -105,7 +117,8 @@ class SettingsViewModel @Inject constructor(
         syncQueueDao.observeConflictCount(),
         syncQueueDao.observeLatestConflictError(),
         settingsRepository.observeBottomNavigation(),
-        settingsRepository.observeMealPhotoAnalysisEnabled()
+        settingsRepository.observeMealPhotoAnalysisEnabled(),
+        localDataDeletionState
     ) { values ->
         val n8nSettings = values[0] as N8nConnectionSettings
         val temporaryPhotosOnly = values[1] as Boolean
@@ -115,6 +128,7 @@ class SettingsViewModel @Inject constructor(
         val export = values[4] as Pair<String?, String?>
         @Suppress("UNCHECKED_CAST")
         val bottomNavigation = values[10] as List<BottomNavigationDestination>
+        val deletionState = values[12] as LocalDataDeletionState
         SettingsUiState(
             n8nSettings = n8nSettings.copy(baseUrl = values[7] as String),
             temporaryPhotosOnly = temporaryPhotosOnly,
@@ -131,7 +145,9 @@ class SettingsViewModel @Inject constructor(
             appearanceMode = values[6] as AppearanceMode,
             bottomNavigation = bottomNavigation,
             exportStatus = export.first,
-            exportFilePath = export.second
+            exportFilePath = export.second,
+            deletingLocalData = deletionState.inProgress,
+            localDataDeletionError = deletionState.errorMessage
         )
     }.stateIn(
         scope = viewModelScope,
@@ -271,22 +287,55 @@ class SettingsViewModel @Inject constructor(
 
     fun generateLocalJsonExport() {
         viewModelScope.launch {
-            val export = LocalDataExport(
-                generatedAt = System.currentTimeMillis(),
-                profile = profileRepository.observeProfile().first(),
-                nutritionGoal = profileRepository.observeNutritionGoal().first(),
-                foodEntries = nutritionRepository.observeFoodHistory().first(),
-                workouts = workoutRepository.observeHistory().first(),
-                bodyWeights = bodyWeightRepository.observeHistory().first()
-            )
-            val file = withContext(Dispatchers.IO) {
+            exportStatus.value = null
+            exportFilePath.value = null
+            try {
+                val export = LocalDataExport(
+                    generatedAt = System.currentTimeMillis(),
+                    profile = profileRepository.observeProfile().first(),
+                    nutritionGoal = profileRepository.observeNutritionGoal().first(),
+                    foodEntries = nutritionRepository.observeFoodHistory().first(),
+                    workouts = workoutRepository.observeHistory().first(),
+                    bodyWeights = bodyWeightRepository.observeHistory().first()
+                )
                 val json = exportAdapter.toJson(export)
-                File(context.cacheDir, "fitns-export-${System.currentTimeMillis()}.json").apply {
-                    writeText(json)
+                val file = cacheManager.writeExport(json)
+                exportStatus.value = "Your export is ready to share."
+                exportFilePath.value = file.absolutePath
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (_: Exception) {
+                exportStatus.value = "The export could not be prepared. Please try again."
+            }
+        }
+    }
+
+    fun deleteAllLocalData() {
+        if (localDataDeletionState.value.inProgress) return
+        localDataDeletionState.value = LocalDataDeletionState(inProgress = true)
+        viewModelScope.launch {
+            val result = withContext(NonCancellable) {
+                localDataDeletionRepository.deleteAllLocalData()
+            }
+            when (result) {
+                is AppResult.Success -> {
+                    bearerTokenConfigured.value = false
+                    bearerTokenInput.value = ""
+                    exportFilePath.value = null
+                    exportStatus.value = null
+                    localDataDeletionState.value = LocalDataDeletionState()
+                    eventChannel.send(SettingsEvent.NavigateToOnboarding)
+                }
+                is AppResult.Failure -> {
+                    val details = (result.error as? AppError.Unknown)?.message
+                    localDataDeletionState.value = LocalDataDeletionState(
+                        errorMessage = buildString {
+                            append("Not all local data could be deleted. Some data may remain on this device.")
+                            if (!details.isNullOrBlank()) append(" ").append(details)
+                        }
+                    )
                 }
             }
-            exportStatus.value = "Your export is ready to share."
-            exportFilePath.value = file.absolutePath
         }
     }
 
@@ -308,6 +357,11 @@ private data class ConnectionState(
     val testing: Boolean,
     val tokenInput: String,
     val tokenConfigured: Boolean
+)
+
+private data class LocalDataDeletionState(
+    val inProgress: Boolean = false,
+    val errorMessage: String? = null
 )
 
 data class LocalDataExport(

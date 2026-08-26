@@ -40,15 +40,20 @@ class LocalWorkoutRepository @Inject constructor(
             val workoutExercisesByExercise = workoutExercises.groupBy { it.exerciseId }
             val setsByWorkoutExercise = sets.groupBy { it.workoutExerciseId }
             seededExercises.map { exercise ->
-                val relatedSets = workoutExercisesByExercise[exercise.id].orEmpty()
+                val relatedWorkoutExercises = workoutExercisesByExercise[exercise.id].orEmpty()
+                val relatedSets = relatedWorkoutExercises
                     .flatMap { workoutExercise -> setsByWorkoutExercise[workoutExercise.id].orEmpty() }
-                val latestSet = relatedSets.maxByOrNull { it.createdAt }
+                val latestWorkoutExercise = relatedWorkoutExercises.maxByOrNull { it.createdAt }
+                val latestWorkoutSets = latestWorkoutExercise
+                    ?.let { setsByWorkoutExercise[it.id].orEmpty() }
+                    .orEmpty()
+                val latestSet = latestWorkoutSets.maxByOrNull { it.createdAt }
                 val best = relatedSets
                     .maxOfOrNull { it.weightKg }
                 exercise.toDomain(
                     lastWeightKg = latestSet?.weightKg,
                     lastRepetitions = latestSet?.repetitions,
-                    lastSets = latestSet?.setCount,
+                    lastSets = latestWorkoutSets.sumOf { it.setCount }.takeIf { it > 0 },
                     personalBestKg = best ?: latestSet?.weightKg
                 )
             }
@@ -58,10 +63,12 @@ class LocalWorkoutRepository @Inject constructor(
     override fun observeHistory(): Flow<List<WorkoutLogEntry>> {
         return combine(
             observeExercises(),
+            workoutDao.observeWorkouts(),
             workoutDao.observeWorkoutExercises(),
             workoutDao.observeWorkoutSets()
-        ) { exercises, workoutExercises, sets ->
+        ) { exercises, workouts, workoutExercises, sets ->
             val exerciseById = exercises.associateBy { it.id }
+            val workoutById = workouts.associateBy { it.id }
             val setsByWorkoutExercise = sets.groupBy { it.workoutExerciseId }
             workoutExercises.mapNotNull { workoutExercise ->
                 val exercise = exerciseById[workoutExercise.exerciseId]
@@ -71,12 +78,14 @@ class LocalWorkoutRepository @Inject constructor(
                 if (exerciseSets.isEmpty()) {
                     return@mapNotNull null
                 }
+                val workout = workoutById[workoutExercise.workoutId]
                 WorkoutLogEntry(
                     id = workoutExercise.workoutId,
                     exercise = exercise,
                     sets = exerciseSets.map { it.toDomain() },
                     notes = workoutExercise.notes,
-                    loggedAt = exerciseSets.maxOf { it.createdAt }
+                    loggedAt = workout?.startedAt ?: exerciseSets.maxOf { it.createdAt },
+                    durationMinutes = workout?.durationMinutes
                 )
             }
         }
@@ -186,7 +195,13 @@ class LocalWorkoutRepository @Inject constructor(
             exercise.toWorkoutExerciseEntity(workoutId = session.id, now = finishedAt)
         }
         val sets = completedExercises.flatMap { (exercise, completedSets) ->
-            completedSets.map { set -> set.toEntity(exercise.id, finishedAt) }
+            completedSets
+                .sortedBy { it.setNumber }
+                .mapIndexed { index, set ->
+                    // The current schema has no dedicated set-order column. A stable millisecond
+                    // offset preserves the user's set order without overloading setCount.
+                    set.toEntity(exercise.id, finishedAt + index)
+                }
         }
 
         database.withTransaction {
@@ -254,8 +269,8 @@ class LocalWorkoutRepository @Inject constructor(
 
     private fun validate(set: WorkoutSetInput): AppError? {
         return when {
-            set.weightKg < 0.0 -> AppError.Validation("Workout weight cannot be negative.")
-            set.repetitions < 0 -> AppError.Validation("Reps cannot be negative.")
+            !set.weightKg.isFinite() || set.weightKg < 0.0 -> AppError.Validation("Workout weight must be a finite, non-negative number.")
+            set.repetitions < 1 -> AppError.Validation("Reps must be at least one.")
             set.sets < 1 -> AppError.Validation("Set count must be at least one.")
             set.rpe != null && set.rpe !in 1..10 -> AppError.Validation("RPE must be between 1 and 10.")
             set.rir != null && set.rir !in 0..10 -> AppError.Validation("RIR must be between 0 and 10.")

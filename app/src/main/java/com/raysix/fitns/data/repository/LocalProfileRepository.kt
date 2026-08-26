@@ -82,18 +82,28 @@ class LocalProfileRepository @Inject constructor(
         val error = validateGoal(goal)
         if (error != null) return AppResult.Failure(error)
         val now = System.currentTimeMillis()
-        val open = profileDao.findOpenNutritionGoal(DefaultUserProfileId)
-        if (open != null) {
-            profileDao.closeNutritionGoal(open.id, now, now)
-        }
-        profileDao.upsertNutritionGoal(goal.toVersionedEntity(now))
+        profileDao.replaceOpenNutritionGoal(goal.toVersionedEntity(now), now)
         return AppResult.Success(Unit)
     }
 
     override suspend fun saveNutrientTargets(targets: List<NutrientTarget>): AppResult<Unit> {
+        val invalidTarget = targets.firstOrNull {
+            !it.targetAmount.isFinite() || it.targetAmount < 0.0 || it.unit.isBlank()
+        }
+        if (invalidTarget != null) {
+            return AppResult.Failure(
+                AppError.Validation("${invalidTarget.key.label} needs a finite, non-negative target and a unit.")
+            )
+        }
+        if (targets.distinctBy { it.key }.size != targets.size) {
+            return AppResult.Failure(AppError.Validation("Each nutrient can only have one active target."))
+        }
         val now = System.currentTimeMillis()
-        profileDao.closeAllNutrientTargets(DefaultUserProfileId, now, now)
-        profileDao.upsertNutrientTargets(targets.map { it.toEntity(now) })
+        profileDao.replaceOpenNutrientTargets(
+            userProfileId = DefaultUserProfileId,
+            targets = targets.map { it.toEntity(now) },
+            validTo = now
+        )
         return AppResult.Success(Unit)
     }
 
@@ -111,10 +121,10 @@ class LocalProfileRepository @Inject constructor(
     private fun validateGoal(goal: NutritionGoal): AppError? {
         return when {
             goal.caloriesKcal !in 800.0..8000.0 -> AppError.Validation("Calorie goal looks implausible.")
-            goal.proteinGrams < 0.0 -> AppError.Validation("Protein goal cannot be negative.")
-            goal.carbohydrateGrams < 0.0 -> AppError.Validation("Carb goal cannot be negative.")
-            goal.fatGrams < 0.0 -> AppError.Validation("Fat goal cannot be negative.")
-            goal.fiberGrams < 0.0 -> AppError.Validation("Fiber goal cannot be negative.")
+            !goal.proteinGrams.isFinite() || goal.proteinGrams < 0.0 -> AppError.Validation("Protein goal must be a finite, non-negative number.")
+            !goal.carbohydrateGrams.isFinite() || goal.carbohydrateGrams < 0.0 -> AppError.Validation("Carb goal must be a finite, non-negative number.")
+            !goal.fatGrams.isFinite() || goal.fatGrams < 0.0 -> AppError.Validation("Fat goal must be a finite, non-negative number.")
+            !goal.fiberGrams.isFinite() || goal.fiberGrams < 0.0 -> AppError.Validation("Fiber goal must be a finite, non-negative number.")
             goal.waterMilliliters !in 0.0..10000.0 -> AppError.Validation("Water goal looks implausible.")
             else -> null
         }

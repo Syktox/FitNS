@@ -113,7 +113,7 @@ fun ActiveWorkoutSet.toEntity(workoutExerciseId: String, now: Long = System.curr
         workoutExerciseId = workoutExerciseId,
         weightKg = weightKg,
         repetitions = repetitions,
-        setCount = setNumber,
+        setCount = 1,
         isWarmup = setType == WorkoutSetType.WarmUp,
         isPerSide = false,
         setType = setType.name,
@@ -134,10 +134,14 @@ fun newWorkoutEntity(id: String, now: Long, endedAt: Long? = now): WorkoutEntity
         id = id,
         startedAt = now,
         endedAt = endedAt,
-        durationMinutes = null,
+        durationMinutes = endedAt?.let { end ->
+            ((end - now).coerceAtLeast(0L) / 60_000L)
+                .coerceAtMost(Int.MAX_VALUE.toLong())
+                .toInt()
+        },
         notes = "",
         createdAt = now,
-        updatedAt = now,
+        updatedAt = endedAt ?: now,
         deletedAt = null,
         syncStatus = SyncStatus.PendingSync,
         serverVersion = null

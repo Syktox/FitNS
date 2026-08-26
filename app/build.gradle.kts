@@ -9,9 +9,28 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
+val androidSigningEnv = loadAndroidSigningEnv(rootProject.file(".env.android-signing"))
+val localProps = loadLocalProperties(rootProject.file("local.properties"))
+val debugGoogleWebClientId = localProps["GOOGLE_WEB_CLIENT_ID"].orEmpty()
+val releaseGoogleWebClientId = System.getenv("GOOGLE_WEB_CLIENT_ID")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: debugGoogleWebClientId
+
+fun signingValue(name: String): String? = System.getenv(name) ?: androidSigningEnv[name]
+
+val releaseKeystoreBase64 = signingValue("ANDROID_KEYSTORE_BASE64")
+val releaseKeystorePassword = signingValue("ANDROID_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingValue("ANDROID_KEY_ALIAS")
+val releaseKeyPassword = signingValue("ANDROID_KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    releaseKeystoreBase64,
+    releaseKeystorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
-    val androidSigningEnv = loadAndroidSigningEnv(rootProject.file(".env.android-signing"))
-    val localProps = loadLocalProperties(rootProject.file("local.properties"))
     val buildVersionName = System.getenv("FITNS_VERSION_NAME")
         ?.removePrefix("v")
         ?.takeIf { it.matches(Regex("\\d+\\.\\d+\\.\\d+")) }
@@ -34,23 +53,11 @@ android {
         buildConfigField(
             "String",
             "GOOGLE_WEB_CLIENT_ID",
-            "\"${localProps["GOOGLE_WEB_CLIENT_ID"].orEmpty()}\""
+            asBuildConfigString(debugGoogleWebClientId)
         )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-
-    fun signingValue(name: String): String? = System.getenv(name) ?: androidSigningEnv[name]
-    val releaseKeystoreBase64 = signingValue("ANDROID_KEYSTORE_BASE64")
-    val releaseKeystorePassword = signingValue("ANDROID_KEYSTORE_PASSWORD")
-    val releaseKeyAlias = signingValue("ANDROID_KEY_ALIAS")
-    val releaseKeyPassword = signingValue("ANDROID_KEY_PASSWORD")
-    val hasReleaseSigning = listOf(
-        releaseKeystoreBase64,
-        releaseKeystorePassword,
-        releaseKeyAlias,
-        releaseKeyPassword
-    ).all { !it.isNullOrBlank() }
 
     signingConfigs {
         if (hasReleaseSigning) {
@@ -71,6 +78,11 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            buildConfigField(
+                "String",
+                "GOOGLE_WEB_CLIENT_ID",
+                asBuildConfigString(releaseGoogleWebClientId)
+            )
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
@@ -108,6 +120,35 @@ android {
         getByName("debug").assets.srcDir("$projectDir/schemas")
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
         getByName("test").assets.srcDir("$projectDir/schemas")
+    }
+}
+
+val releaseArtifactTaskNames = setOf(
+    "assembleRelease",
+    "bundleRelease",
+    "packageRelease",
+    "packageReleaseBundle",
+    "signReleaseBundle"
+)
+
+gradle.taskGraph.whenReady {
+    val buildsReleaseArtifact = allTasks.any { task ->
+        task.project == project && task.name in releaseArtifactTaskNames
+    }
+    if (buildsReleaseArtifact) {
+        val missingConfiguration = buildList {
+            if (releaseKeystoreBase64.isNullOrBlank()) add("ANDROID_KEYSTORE_BASE64")
+            if (releaseKeystorePassword.isNullOrBlank()) add("ANDROID_KEYSTORE_PASSWORD")
+            if (releaseKeyAlias.isNullOrBlank()) add("ANDROID_KEY_ALIAS")
+            if (releaseKeyPassword.isNullOrBlank()) add("ANDROID_KEY_PASSWORD")
+            if (releaseGoogleWebClientId.isBlank()) add("GOOGLE_WEB_CLIENT_ID")
+        }
+        if (missingConfiguration.isNotEmpty()) {
+            throw GradleException(
+                "Release build configuration is incomplete. Missing: " +
+                    missingConfiguration.joinToString()
+            )
+        }
     }
 }
 
@@ -169,6 +210,21 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+fun asBuildConfigString(value: String): String = buildString {
+    append('"')
+    value.forEach { character ->
+        when (character) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> append(character)
+        }
+    }
+    append('"')
 }
 
 fun loadAndroidSigningEnv(file: File): Map<String, String> {

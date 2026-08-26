@@ -7,6 +7,7 @@ import com.raysix.fitns.domain.model.Exercise
 import com.raysix.fitns.domain.model.PersonalRecordType
 import com.raysix.fitns.domain.model.WorkoutLogEntry
 import com.raysix.fitns.domain.model.WorkoutSetInput
+import com.raysix.fitns.domain.model.WorkoutSetType
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -55,6 +56,52 @@ class PersonalRecordDetectorTest {
 
         assertTrue(PersonalRecordType.HighestWeight in types)
         assertTrue(PersonalRecordType.HighestRepsAtWeight in types)
+        assertTrue(PersonalRecordType.HighestEstimatedOneRepMax in types)
+        assertTrue(PersonalRecordType.HighestSessionVolume in types)
+    }
+
+    @Test
+    fun detect_ignoresHistoricalWarmUpSetsForRecords() {
+        val history = listOf(
+            WorkoutLogEntry(
+                id = "old-workout",
+                exercise = bench,
+                sets = listOf(
+                    WorkoutSetInput(
+                        weightKg = 150.0,
+                        repetitions = 2,
+                        rpe = null,
+                        setType = WorkoutSetType.WarmUp
+                    )
+                ),
+                loggedAt = 1L
+            )
+        )
+        val session = ActiveWorkoutSession(
+            sourcePlanId = "plan",
+            name = "Push",
+            exercises = listOf(
+                ActiveWorkoutExercise(
+                    exercise = bench,
+                    sortOrder = 0,
+                    targetRepMin = 8,
+                    targetRepMax = 12,
+                    restSeconds = 90,
+                    sets = listOf(
+                        ActiveWorkoutSet(
+                            setNumber = 1,
+                            weightKg = 100.0,
+                            repetitions = 8,
+                            completedAt = 2L
+                        )
+                    )
+                )
+            )
+        )
+
+        val types = detector.detect(session, history).map { it.type }.toSet()
+
+        assertTrue(PersonalRecordType.HighestWeight in types)
         assertTrue(PersonalRecordType.HighestEstimatedOneRepMax in types)
         assertTrue(PersonalRecordType.HighestSessionVolume in types)
     }

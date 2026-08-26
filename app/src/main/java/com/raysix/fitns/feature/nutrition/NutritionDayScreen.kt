@@ -40,6 +40,7 @@ import com.raysix.fitns.core.design.ProgressRing
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.SectionTitle
+import com.raysix.fitns.core.input.toUserDecimalOrNull
 import com.raysix.fitns.core.design.TagChip
 import com.raysix.fitns.core.design.isWideScreen
 import com.raysix.fitns.domain.model.DataQuality
@@ -648,7 +649,7 @@ private fun SavedMealRow(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(0.5, 1.0, 1.5, 2.0).forEach { factor ->
                     FilterChip(
-                        selected = scale.toDoubleOrNull() == factor,
+                        selected = scale.toUserDecimalOrNull() == factor,
                         onClick = { scale = factor.toString() },
                         label = { Text("${factor}x") }
                     )
@@ -659,7 +660,7 @@ private fun SavedMealRow(
                     ActionPill(
                         text = mealType.name,
                         filled = mealType == MealType.Snack,
-                        onClick = { onLogSavedMeal(meal, scale.toDoubleOrNull() ?: 1.0, mealType) }
+                        onClick = { onLogSavedMeal(meal, scale.toUserDecimalOrNull() ?: 1.0, mealType) }
                     )
                 }
             }

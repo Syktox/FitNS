@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.raysix.fitns.core.design.AdaptiveTwoColumn
@@ -351,6 +353,12 @@ private fun TrendLine(points: List<TrendPoint>, lineColor: Color) {
         modifier = Modifier
             .fillMaxWidth()
             .height(132.dp)
+            .semantics {
+                val first = points.first()
+                val last = points.last()
+                contentDescription =
+                    "Trend chart from ${first.value.roundToInt()} on ${first.label} to ${last.value.roundToInt()} on ${last.label}."
+            }
     ) {
         val values = points.map { it.value }
         val min = values.minOrNull() ?: 0.0

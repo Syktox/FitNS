@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -37,18 +38,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.raysix.fitns.core.design.EmptyStateCard
+import com.raysix.fitns.core.design.ErrorBanner
 import com.raysix.fitns.core.design.FitNsDimens
 import com.raysix.fitns.core.design.ModernCard
 import com.raysix.fitns.core.design.PillButton
 import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.TagChip
+import com.raysix.fitns.core.input.toUserDecimalOrNull
 import com.raysix.fitns.domain.model.ActiveWorkoutExercise
 import com.raysix.fitns.domain.model.ActiveWorkoutSession
 import com.raysix.fitns.domain.model.ActiveWorkoutSet
@@ -75,7 +83,17 @@ fun ActiveWorkoutScreen(
     onResumeTimer: () -> Unit,
     onSkipTimer: () -> Unit
 ) {
-    var showDiscardConfirmation by remember { mutableStateOf(false) }
+    val session = uiState.activeSession
+    var showDiscardConfirmation by rememberSaveable { mutableStateOf(false) }
+    var showFinishConfirmation by rememberSaveable { mutableStateOf(false) }
+    if (uiState.isSavingActiveSession) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Saving workout…") },
+            text = { Text("Your completed sets and personal records are being saved safely.") },
+            confirmButton = {}
+        )
+    }
     if (showDiscardConfirmation) {
         AlertDialog(
             onDismissRequest = { showDiscardConfirmation = false },
@@ -90,7 +108,6 @@ fun ActiveWorkoutScreen(
             dismissButton = { TextButton(onClick = { showDiscardConfirmation = false }) { Text("Keep workout") } }
         )
     }
-    val session = uiState.activeSession
     if (session == null) {
         Column(
             modifier = Modifier
@@ -109,9 +126,47 @@ fun ActiveWorkoutScreen(
         return
     }
 
+    val incompleteSetCount = session.totalSetCount - session.completedSetCount
+    if (showFinishConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showFinishConfirmation = false },
+            title = { Text("Finish workout?") },
+            text = {
+                Text(
+                    "$incompleteSetCount incomplete ${if (incompleteSetCount == 1) "set" else "sets"} will not be saved to your history and will be discarded."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !uiState.isSavingActiveSession,
+                    onClick = {
+                        showFinishConfirmation = false
+                        onFinish()
+                    }
+                ) {
+                    Text("Save completed sets")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFinishConfirmation = false }) {
+                    Text("Keep training")
+                }
+            }
+        )
+    }
+
+    val requestFinish = {
+        if (incompleteSetCount > 0 && session.completedSetCount > 0) {
+            showFinishConfirmation = true
+        } else {
+            onFinish()
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .imePadding()
             .padding(horizontal = FitNsDimens.ScreenPadding),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -120,14 +175,20 @@ fun ActiveWorkoutScreen(
                 ActiveWorkoutHeader(
                     session = session,
                     timer = uiState.restTimer,
+                    isSaving = uiState.isSavingActiveSession,
                     onBack = onBack,
-                    onFinish = onFinish,
+                    onFinish = requestFinish,
                     onDiscard = { showDiscardConfirmation = true },
                     onAddRestTime = onAddRestTime,
                     onPauseTimer = onPauseTimer,
                     onResumeTimer = onResumeTimer,
                     onSkipTimer = onSkipTimer
                 )
+            }
+        }
+        uiState.errorMessage?.let { message ->
+            item(key = "active-workout-error") {
+                ErrorBanner(message = message)
             }
         }
         if (uiState.personalRecords.isNotEmpty()) {
@@ -169,6 +230,7 @@ fun ActiveWorkoutScreen(
 private fun ActiveWorkoutHeader(
     session: ActiveWorkoutSession,
     timer: RestTimerUiState,
+    isSaving: Boolean,
     onBack: () -> Unit,
     onFinish: () -> Unit,
     onDiscard: () -> Unit,
@@ -188,7 +250,11 @@ private fun ActiveWorkoutHeader(
                 Text("${session.completedSetCount}/${session.totalSetCount} sets", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onDiscard) { Icon(Icons.Filled.Delete, contentDescription = "Discard workout", tint = MaterialTheme.colorScheme.error) }
-            PillButton(text = "Finish", onClick = onFinish)
+            PillButton(
+                text = if (isSaving) "Saving…" else "Finish",
+                onClick = onFinish,
+                enabled = !isSaving
+            )
         }
         LinearProgressIndicator(
             progress = { progress.coerceIn(0f, 1f) },
@@ -248,6 +314,10 @@ private fun RestTimerPanel(
 private fun TimerIconButton(contentDescription: String, text: String, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
+        modifier = Modifier.semantics {
+            this.contentDescription = contentDescription
+            role = Role.Button
+        },
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface
@@ -314,6 +384,15 @@ private fun ActiveSetRow(
     var reps by remember(set.id, set.repetitions) { mutableStateOf(set.repetitions.toString()) }
     var rpe by remember(set.id, set.rpe) { mutableStateOf(set.rpe?.toString().orEmpty()) }
     var rir by remember(set.id, set.rir) { mutableStateOf(set.rir?.toString().orEmpty()) }
+    val parsedWeight = weight.toUserDecimalOrNull()
+    val parsedReps = reps.toIntOrNull()
+    val parsedRpe = rpe.toIntOrNull()
+    val parsedRir = rir.toIntOrNull()
+    val weightIsValid = parsedWeight?.let { it.isFinite() && it >= 0.0 } == true
+    val repsAreValid = parsedReps?.let { it > 0 } == true
+    val rpeIsValid = rpe.isBlank() || parsedRpe?.let { it in 1..10 } == true
+    val rirIsValid = rir.isBlank() || parsedRir?.let { it in 0..10 } == true
+    val canComplete = weightIsValid && repsAreValid && rpeIsValid && rirIsValid
 
     ModernCard(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -328,7 +407,10 @@ private fun ActiveSetRow(
                     )
                 }
                 Row {
-                    IconButton(onClick = { onToggleSetComplete(activeExerciseId, set.id) }) {
+                    IconButton(
+                        enabled = set.completedAt != null || canComplete,
+                        onClick = { onToggleSetComplete(activeExerciseId, set.id) }
+                    ) {
                         Icon(
                             Icons.Filled.Check,
                             contentDescription = if (set.completedAt == null) "Mark set complete" else "Mark set incomplete",
@@ -344,19 +426,25 @@ private fun ActiveSetRow(
                 SetNumberField(
                     value = weight,
                     label = "Weight",
+                    isError = weight.isNotBlank() && !weightIsValid,
                     modifier = Modifier.weight(1f),
                     onValueChange = {
-                        weight = it
-                        onUpdateSet(activeExerciseId, set.id, it.toDoubleOrNull(), reps.toIntOrNull(), rpe.toIntOrNull(), rir.toIntOrNull(), set.setType)
+                        val normalized = it.normalizedUnsignedDecimalInputOrNull()
+                            ?: return@SetNumberField
+                        weight = normalized
+                        onUpdateSet(activeExerciseId, set.id, normalized.toUserDecimalOrNull(), reps.toIntOrNull(), rpe.toIntOrNull(), rir.toIntOrNull(), set.setType)
                     }
                 )
                 SetNumberField(
                     value = reps,
                     label = "Reps",
+                    isError = reps.isNotBlank() && !repsAreValid,
+                    keyboardType = KeyboardType.Number,
                     modifier = Modifier.weight(1f),
                     onValueChange = {
+                        if (!it.isUnsignedIntegerInput()) return@SetNumberField
                         reps = it
-                        onUpdateSet(activeExerciseId, set.id, weight.toDoubleOrNull(), it.toIntOrNull(), rpe.toIntOrNull(), rir.toIntOrNull(), set.setType)
+                        onUpdateSet(activeExerciseId, set.id, parsedWeight, it.toIntOrNull(), rpe.toIntOrNull(), rir.toIntOrNull(), set.setType)
                     }
                 )
             }
@@ -364,19 +452,25 @@ private fun ActiveSetRow(
                 SetNumberField(
                     value = rpe,
                     label = "RPE",
+                    isError = !rpeIsValid,
+                    keyboardType = KeyboardType.Number,
                     modifier = Modifier.weight(1f),
                     onValueChange = {
+                        if (!it.isUnsignedIntegerInput()) return@SetNumberField
                         rpe = it
-                        onUpdateSet(activeExerciseId, set.id, weight.toDoubleOrNull(), reps.toIntOrNull(), it.toIntOrNull(), rir.toIntOrNull(), set.setType)
+                        onUpdateSet(activeExerciseId, set.id, parsedWeight, reps.toIntOrNull(), it.toIntOrNull(), rir.toIntOrNull(), set.setType)
                     }
                 )
                 SetNumberField(
                     value = rir,
                     label = "RIR",
+                    isError = !rirIsValid,
+                    keyboardType = KeyboardType.Number,
                     modifier = Modifier.weight(1f),
                     onValueChange = {
+                        if (!it.isUnsignedIntegerInput()) return@SetNumberField
                         rir = it
-                        onUpdateSet(activeExerciseId, set.id, weight.toDoubleOrNull(), reps.toIntOrNull(), rpe.toIntOrNull(), it.toIntOrNull(), set.setType)
+                        onUpdateSet(activeExerciseId, set.id, parsedWeight, reps.toIntOrNull(), rpe.toIntOrNull(), it.toIntOrNull(), set.setType)
                     }
                 )
             }
@@ -385,7 +479,7 @@ private fun ActiveSetRow(
                     FilterChip(
                         selected = set.setType == type,
                         onClick = {
-                            onUpdateSet(activeExerciseId, set.id, weight.toDoubleOrNull(), reps.toIntOrNull(), rpe.toIntOrNull(), rir.toIntOrNull(), type)
+                            onUpdateSet(activeExerciseId, set.id, parsedWeight, reps.toIntOrNull(), rpe.toIntOrNull(), rir.toIntOrNull(), type)
                         },
                         label = { Text(type.label) }
                     )
@@ -423,6 +517,8 @@ private fun AddExerciseCard(exercises: List<Exercise>, onAddExercise: (Exercise)
 private fun SetNumberField(
     value: String,
     label: String,
+    isError: Boolean,
+    keyboardType: KeyboardType = KeyboardType.Decimal,
     modifier: Modifier,
     onValueChange: (String) -> Unit
 ) {
@@ -430,8 +526,9 @@ private fun SetNumberField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         singleLine = true,
+        isError = isError,
         shape = RoundedCornerShape(14.dp),
         modifier = modifier
     )
@@ -449,4 +546,15 @@ private fun Double.formatNumber(): String {
     } else {
         ((this * 10.0).roundToInt() / 10.0).toString()
     }
+}
+
+internal fun String.normalizedUnsignedDecimalInputOrNull(): String? {
+    val normalized = replace(',', '.')
+    return normalized.takeIf {
+        it.isEmpty() || (it.count { character -> character == '.' } <= 1 && it.all { character -> character.isDigit() || character == '.' })
+    }
+}
+
+private fun String.isUnsignedIntegerInput(): Boolean {
+    return all(Char::isDigit)
 }

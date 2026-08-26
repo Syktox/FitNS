@@ -17,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Singleton
 class SyncScheduler @Inject constructor(
@@ -25,9 +26,11 @@ class SyncScheduler @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var lastEnqueueAt = 0L
     private var trailingJob: Job? = null
+    private var pausedForLocalDataDeletion = false
 
     @Synchronized
     fun schedule() {
+        if (pausedForLocalDataDeletion) return
         val now = System.currentTimeMillis()
         val elapsed = now - lastEnqueueAt
         if (elapsed >= CoalescingWindowMillis) {
@@ -41,11 +44,42 @@ class SyncScheduler @Inject constructor(
         trailingJob = scope.launch {
             delay(CoalescingWindowMillis - elapsed)
             synchronized(this@SyncScheduler) {
-                lastEnqueueAt = System.currentTimeMillis()
                 trailingJob = null
-                enqueueWork()
+                if (!pausedForLocalDataDeletion) {
+                    lastEnqueueAt = System.currentTimeMillis()
+                    enqueueWork()
+                }
             }
         }
+    }
+
+    /**
+     * Prevents new sync work and waits until WorkManager has applied the
+     * cancellation to the complete unique sync chain.
+     */
+    suspend fun pauseAndCancelPendingWork() {
+        synchronized(this) {
+            pausedForLocalDataDeletion = true
+            trailingJob?.cancel()
+            trailingJob = null
+        }
+        try {
+            withContext(Dispatchers.IO) {
+                WorkManager.getInstance(context)
+                    .cancelUniqueWork(SyncWorkName)
+                    .result
+                    .get()
+            }
+        } catch (exception: Exception) {
+            resumeScheduling()
+            throw exception
+        }
+    }
+
+    @Synchronized
+    fun resumeScheduling() {
+        pausedForLocalDataDeletion = false
+        lastEnqueueAt = 0L
     }
 
     private fun enqueueWork() {

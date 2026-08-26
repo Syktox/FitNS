@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.raysix.fitns.data.local.entity.NutrientTargetEntity
 import com.raysix.fitns.data.local.entity.NutritionGoalEntity
 import com.raysix.fitns.data.local.entity.UserProfileEntity
@@ -64,18 +65,8 @@ interface ProfileDao {
     @Query("SELECT * FROM nutrition_goals WHERE id = :id AND deletedAt IS NULL LIMIT 1")
     suspend fun findNutritionGoal(id: String): NutritionGoalEntity?
 
-    @Query(
-        """
-        SELECT * FROM nutrition_goals
-        WHERE userProfileId = :userProfileId AND deletedAt IS NULL AND validTo IS NULL
-        ORDER BY validFrom DESC
-        LIMIT 1
-        """
-    )
-    suspend fun findOpenNutritionGoal(userProfileId: String): NutritionGoalEntity?
-
-    @Query("UPDATE nutrition_goals SET validTo = :validTo, updatedAt = :updatedAt WHERE id = :id")
-    suspend fun closeNutritionGoal(id: String, validTo: Long, updatedAt: Long)
+    @Query("UPDATE nutrition_goals SET validTo = MAX(:validTo, validFrom), updatedAt = :updatedAt WHERE userProfileId = :userProfileId AND deletedAt IS NULL AND validTo IS NULL")
+    suspend fun closeAllOpenNutritionGoals(userProfileId: String, validTo: Long, updatedAt: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertProfile(profile: UserProfileEntity)
@@ -86,6 +77,22 @@ interface ProfileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertNutrientTargets(targets: List<NutrientTargetEntity>)
 
-    @Query("UPDATE nutrient_targets SET validTo = :validTo, updatedAt = :updatedAt WHERE userProfileId = :userProfileId AND validTo IS NULL")
+    @Query("UPDATE nutrient_targets SET validTo = MAX(:validTo, validFrom), updatedAt = :updatedAt WHERE userProfileId = :userProfileId AND validTo IS NULL")
     suspend fun closeAllNutrientTargets(userProfileId: String, validTo: Long, updatedAt: Long)
+
+    @Transaction
+    suspend fun replaceOpenNutritionGoal(goal: NutritionGoalEntity, validTo: Long) {
+        closeAllOpenNutritionGoals(goal.userProfileId, validTo, validTo)
+        upsertNutritionGoal(goal)
+    }
+
+    @Transaction
+    suspend fun replaceOpenNutrientTargets(
+        userProfileId: String,
+        targets: List<NutrientTargetEntity>,
+        validTo: Long
+    ) {
+        closeAllNutrientTargets(userProfileId, validTo, validTo)
+        upsertNutrientTargets(targets)
+    }
 }

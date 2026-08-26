@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface WorkoutDao {
+    @Query("SELECT * FROM workouts WHERE deletedAt IS NULL ORDER BY startedAt DESC")
+    fun observeWorkouts(): Flow<List<WorkoutEntity>>
+
     @Query("SELECT * FROM exercises WHERE deletedAt IS NULL ORDER BY name ASC")
     fun observeExercises(): Flow<List<ExerciseEntity>>
 

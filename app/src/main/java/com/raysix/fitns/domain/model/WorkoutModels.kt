@@ -64,7 +64,8 @@ data class WorkoutLogEntry(
     val exercise: Exercise,
     val sets: List<WorkoutSetInput>,
     val notes: String = "",
-    val loggedAt: Long = System.currentTimeMillis()
+    val loggedAt: Long = System.currentTimeMillis(),
+    val durationMinutes: Int? = null
 ) {
     val volumeKg: Double
         get() = sets.sumOf { set ->

@@ -57,6 +57,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -96,6 +97,7 @@ import com.raysix.fitns.feature.scanner.BarcodeScannerScreen
 import com.raysix.fitns.feature.scanner.LabelScanScreen
 import com.raysix.fitns.feature.scanner.MealAnalysisScreen
 import com.raysix.fitns.feature.settings.SettingsScreen
+import com.raysix.fitns.feature.settings.SettingsEvent
 import com.raysix.fitns.feature.settings.SettingsViewModel
 import com.raysix.fitns.feature.settings.AccountSettingsScreen
 import com.raysix.fitns.feature.settings.N8nSettingsScreen
@@ -457,11 +459,22 @@ fun FitNsApp() {
                 composable(Route.PrivacySettings.value) {
                     val viewModel: SettingsViewModel = hiltViewModel()
                     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+                    LaunchedEffect(viewModel) {
+                        viewModel.events.collect { event ->
+                            if (event == SettingsEvent.NavigateToOnboarding) {
+                                navController.navigate(Route.Onboarding.value) {
+                                    popUpTo(navController.graph.id) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                            }
+                        }
+                    }
                     PrivacySettingsScreen(
                         uiState = uiState,
                         onBack = { navController.popBackStack() },
                         onMealPhotoAnalysisChange = viewModel::updateMealPhotoAnalysisEnabled,
-                        onGenerateExport = viewModel::generateLocalJsonExport
+                        onGenerateExport = viewModel::generateLocalJsonExport,
+                        onDeleteAllLocalData = viewModel::deleteAllLocalData
                     )
                 }
                 composable(Route.AppearanceSettings.value) {

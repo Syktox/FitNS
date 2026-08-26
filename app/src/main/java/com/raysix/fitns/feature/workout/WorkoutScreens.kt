@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -38,6 +43,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -65,6 +71,7 @@ import com.raysix.fitns.core.design.SectionTitle
 import com.raysix.fitns.core.design.StatCard
 import com.raysix.fitns.core.design.TagChip
 import com.raysix.fitns.core.design.isWideScreen
+import com.raysix.fitns.core.input.toUserDecimalOrNull
 import com.raysix.fitns.domain.model.Exercise
 import com.raysix.fitns.domain.model.WorkoutLogEntry
 import com.raysix.fitns.domain.model.WorkoutPlan
@@ -131,29 +138,26 @@ fun WorkoutStartScreen(
         )
     }
 
-    AdaptiveTwoColumn(
-        header = {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Start Workout", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Text("Fast entry for machines and exercises", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Surface(
-                    onClick = onShowHistory,
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ) {
-                    Text(
-                        "History",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp)
-                    )
-                }
+    AdaptiveColumn {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Start Workout", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("Fast entry for machines and exercises", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        },
-        main = {
+            Surface(
+                onClick = onShowHistory,
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ) {
+                Text(
+                    "History",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp)
+                )
+            }
+        }
             WeeklyTrainingCard(stats = uiState.weeklyStats)
             if (uiState.personalRecords.isNotEmpty()) {
                 ModernCard(
@@ -207,11 +211,14 @@ fun WorkoutStartScreen(
                     },
                     onMoveSelectedExercise = { exerciseId, direction ->
                         val currentIndex = selectedPlanExerciseIds.indexOf(exerciseId)
-                        val targetIndex = (currentIndex + direction).coerceIn(0, selectedPlanExerciseIds.lastIndex)
-                        if (currentIndex >= 0 && currentIndex != targetIndex) {
-                            selectedPlanExerciseIds = selectedPlanExerciseIds.toMutableList().also { list ->
-                                val item = list.removeAt(currentIndex)
-                                list.add(targetIndex, item)
+                        if (currentIndex >= 0) {
+                            val targetIndex = (currentIndex + direction)
+                                .coerceIn(0, selectedPlanExerciseIds.lastIndex)
+                            if (currentIndex != targetIndex) {
+                                selectedPlanExerciseIds = selectedPlanExerciseIds.toMutableList().also { list ->
+                                    val item = list.removeAt(currentIndex)
+                                    list.add(targetIndex, item)
+                                }
                             }
                         }
                     },
@@ -336,9 +343,7 @@ fun WorkoutStartScreen(
                     Text(uiState.errorMessage, fontWeight = FontWeight.SemiBold)
                 }
             }
-        },
-        side = {}
-    )
+    }
 }
 
 @Composable
@@ -426,6 +431,15 @@ private fun PlanBuilderCard(
     onRestSecondsChange: (String) -> Unit,
     onSave: () -> Unit
 ) {
+    val setsValue = targetSets.toIntOrNull()
+    val repMinValue = targetRepMin.toIntOrNull()
+    val repMaxValue = targetRepMax.toIntOrNull()
+    val restValue = restSeconds.toIntOrNull()
+    val planValuesAreValid = setsValue?.let { it >= 1 } == true &&
+        repMinValue?.let { it >= 1 } == true &&
+        repMaxValue?.let { max -> max >= repMinValue } == true &&
+        restValue?.let { it >= 0 } == true
+
     ModernCard(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
         Column(verticalArrangement = Arrangement.spacedBy(FitNsDimens.SectionSpacing)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -475,7 +489,7 @@ private fun PlanBuilderCard(
             }
             PrimaryPillButton(
                 text = "Save Plan",
-                enabled = selectedExerciseIds.isNotEmpty() && planName.isNotBlank(),
+                enabled = selectedExerciseIds.isNotEmpty() && planName.isNotBlank() && planValuesAreValid,
                 onClick = onSave
             )
         }
@@ -766,7 +780,7 @@ fun WorkoutHistoryScreen(
     onDeleteWorkout: (WorkoutLogEntry) -> Unit,
     onBack: () -> Unit = {}
 ) {
-    val visibleHistory = history.take(100)
+    val visibleHistory = history.sortedByDescending { it.loggedAt }.take(100)
     var pendingDelete by remember { mutableStateOf<WorkoutLogEntry?>(null) }
 
     pendingDelete?.let { workout ->
@@ -792,61 +806,48 @@ fun WorkoutHistoryScreen(
         )
     }
 
-    val mid = (visibleHistory.size + 1) / 2
-    if (isWideScreen()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 340.dp),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            horizontal = if (isWideScreen()) 32.dp else 16.dp,
+            vertical = 16.dp
+        ),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }, key = "history-header") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("Workout History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 TextButton(onClick = onBack) { Text("Back") }
-            }
-            if (history.isEmpty()) {
-                EmptyStateCard(
-                    title = "No workouts logged yet.",
-                    message = "Save your first set to unlock progression hints and training volume."
-                )
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        visibleHistory.take(mid).forEach { workout ->
-                            HistoryEntryCard(workout = workout, progressionHint = progressionHint, onDelete = { pendingDelete = workout })
-                        }
-                    }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        visibleHistory.drop(mid).forEach { workout ->
-                            HistoryEntryCard(workout = workout, progressionHint = progressionHint, onDelete = { pendingDelete = workout })
-                        }
-                    }
-                }
             }
         }
-    } else {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Workout History", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                TextButton(onClick = onBack) { Text("Back") }
-            }
-            if (history.isEmpty()) {
+        if (history.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "history-empty") {
                 EmptyStateCard(
                     title = "No workouts logged yet.",
                     message = "Save your first set to unlock progression hints and training volume."
                 )
             }
-            visibleHistory.forEach { workout ->
-                HistoryEntryCard(workout = workout, progressionHint = progressionHint, onDelete = { pendingDelete = workout })
+        } else {
+            itemsIndexed(
+                items = visibleHistory,
+                key = { index, workout -> "${workout.id}:${workout.exercise.id}:${workout.loggedAt}:$index" }
+            ) { _, workout ->
+                HistoryEntryCard(
+                    workout = workout,
+                    progressionHint = progressionHint,
+                    onDelete = { pendingDelete = workout }
+                )
             }
-            if (history.size > visibleHistory.size) Text("Showing the 100 most recent exercises", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (history.size > visibleHistory.size) {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "history-limit") {
+                Text(
+                    "Showing the 100 most recent exercises",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -857,16 +858,43 @@ private fun HistoryEntryCard(workout: WorkoutLogEntry, progressionHint: (Workout
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(workout.exercise.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(workout.loggedAt.formatDate(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(workout.loggedAt.formatDate(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    workout.durationMinutes?.takeIf { it > 0 }?.let { duration ->
+                        Text(
+                            "$duration min session",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
-            workout.sets.firstOrNull()?.let { set ->
+            workout.sets.take(5).forEachIndexed { index, set ->
+                val setPrefix = if (set.sets > 1) "${set.sets} sets" else "Set ${index + 1}"
+                val effort = listOfNotNull(
+                    set.rpe?.let { "RPE $it" },
+                    set.rir?.let { "RIR $it" }
+                ).joinToString(" · ")
                 Text(
-                    "${set.weightKg.roundToInt()} kg x ${set.repetitions} reps x ${set.sets} sets",
+                    buildString {
+                        append("$setPrefix · ${set.weightKg.formatExerciseWeight()} kg × ${set.repetitions}")
+                        if (effort.isNotBlank()) append(" · $effort")
+                    },
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            Text("Volume: ${workout.volumeKg.roundToInt()} kg", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (workout.sets.size > 5) {
+                Text(
+                    "+${workout.sets.size - 5} more sets",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                "${workout.sets.sumOf { it.sets }} sets · ${workout.volumeKg.roundToInt()} kg volume",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Text(progressionHint(workout), color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (workout.notes.isNotBlank()) {
                 Text(workout.notes)
@@ -895,7 +923,7 @@ fun ExerciseLibraryScreen(
     var muscleGroup by rememberSaveable { mutableStateOf("") }
     var equipmentType by rememberSaveable { mutableStateOf("Machine") }
     var gym by rememberSaveable { mutableStateOf("") }
-    var restSeconds by rememberSaveable { mutableStateOf(0) }
+    var restSeconds by rememberSaveable { mutableIntStateOf(0) }
     var exerciseToLogDialogId by rememberSaveable { mutableStateOf<String?>(null) }
     val exerciseToLog = exercises.firstOrNull { it.id == exerciseToLogDialogId }
     var logWeight by rememberSaveable { mutableStateOf("0") }
@@ -951,7 +979,7 @@ fun ExerciseLibraryScreen(
             onSave = {
                 onAddWorkout(
                     exercise,
-                    logWeight.toDoubleOrNull() ?: 0.0,
+                    logWeight.toUserDecimalOrNull() ?: 0.0,
                     logReps.toIntOrNull() ?: 0,
                     logSets.toIntOrNull() ?: 1,
                     logRpe.toIntOrNull(),
@@ -1077,6 +1105,15 @@ private fun ExerciseLogDialog(
     onDismiss: () -> Unit,
     onSave: () -> Unit
 ) {
+    val weightValue = weight.toUserDecimalOrNull()
+    val repsValue = reps.toIntOrNull()
+    val setsValue = sets.toIntOrNull()
+    val rpeValue = rpe.toIntOrNull()
+    val inputIsValid = weightValue?.let { it >= 0.0 } == true &&
+        repsValue?.let { it >= 1 } == true &&
+        setsValue?.let { it >= 1 } == true &&
+        (rpe.isBlank() || rpeValue?.let { it in 1..10 } == true)
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1126,7 +1163,7 @@ private fun ExerciseLogDialog(
                     SecondaryPillButton(text = "Cancel", onClick = onDismiss)
                     PrimaryPillButton(
                         text = "Save Log",
-                        enabled = reps.toIntOrNull() != null && sets.toIntOrNull() != null,
+                        enabled = inputIsValid,
                         onClick = onSave
                     )
                 }
@@ -1404,14 +1441,14 @@ private fun SecondaryPillButton(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun NumericField(value: String, onValueChange: (String) -> Unit, label: String, modifier: Modifier = Modifier.fillMaxWidth()) {
+private fun NumericField(value: String, onValueChange: (String) -> Unit, label: String, modifier: Modifier = Modifier) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         shape = RoundedCornerShape(16.dp),
-        modifier = modifier
+        modifier = modifier.fillMaxWidth()
     )
 }
 

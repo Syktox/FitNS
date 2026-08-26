@@ -41,6 +41,7 @@ import com.raysix.fitns.core.design.ErrorBanner
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.FitnessGoalSelector
+import com.raysix.fitns.core.input.toUserDecimalOrNull
 import com.raysix.fitns.domain.model.UserProfile
 import com.raysix.fitns.domain.usecase.NutritionGoalEstimator
 
@@ -90,11 +91,11 @@ fun OnboardingScreen(
     }
 
     val estimatedGoal = NutritionGoalEstimator.estimate(
-        weightKg = weight.toDoubleOrNull(),
+        weightKg = weight.toUserDecimalOrNull(),
         goal = goalName.ifBlank { "Maintain" },
         activityLevel = activity.ifBlank { "Moderate" }
     )
-    val canSaveProfile = weight.toDoubleOrNull()?.let { it in 20.0..500.0 } == true &&
+    val canSaveProfile = weight.toUserDecimalOrNull()?.let { it in 20.0..500.0 } == true &&
         activity.isNotBlank() && goalName.isNotBlank()
 
     val signInLauncher = rememberLauncherForActivityResult(
@@ -235,9 +236,9 @@ fun OnboardingScreen(
                             profile = UserProfile(
                                 age = age.toIntOrNull(),
                                 sexOrPhysiology = physiology.ifBlank { null },
-                                heightCm = height.toDoubleOrNull(),
-                                weightKg = weight.toDoubleOrNull(),
-                                targetWeightKg = targetWeight.toDoubleOrNull(),
+                                heightCm = height.toUserDecimalOrNull(),
+                                weightKg = weight.toUserDecimalOrNull(),
+                                targetWeightKg = targetWeight.toUserDecimalOrNull(),
                                 activityLevel = activity.ifBlank { "Moderate" },
                                 trainingDaysPerWeek = trainingDays.toIntOrNull() ?: 0,
                                 goal = goalName.ifBlank { "Maintain" }
@@ -300,7 +301,7 @@ private fun NumericField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    modifier: Modifier = Modifier.fillMaxWidth()
+    modifier: Modifier = Modifier
 ) {
     OutlinedTextField(
         value = value,
@@ -308,7 +309,7 @@ private fun NumericField(
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         shape = RoundedCornerShape(16.dp),
-        modifier = modifier
+        modifier = modifier.fillMaxWidth()
     )
 }
 

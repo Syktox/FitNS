@@ -1,6 +1,8 @@
 package com.raysix.fitns.feature.settings
 
 import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +30,9 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +42,11 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,7 +107,7 @@ fun SettingsScreen(
             )
         }
         Text(
-            "FitNS stores health and training data locally. Scanner requests and optional sync use your configured n8n endpoint; Android may include local data in device backup.",
+            "FitNS stores health and training data locally. Scanner requests and optional sync use your configured n8n endpoint. Local health data is excluded from Android cloud backup and device transfer.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 8.dp)
@@ -204,37 +214,132 @@ fun PrivacySettingsScreen(
     uiState: SettingsUiState,
     onBack: () -> Unit,
     onMealPhotoAnalysisChange: (Boolean) -> Unit,
-    onGenerateExport: () -> Unit
+    onGenerateExport: () -> Unit,
+    onDeleteAllLocalData: () -> Unit
 ) {
     val context = LocalContext.current
+    var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = uiState.deletingLocalData) { }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!uiState.deletingLocalData) showDeleteConfirmation = false
+            },
+            title = { Text("Delete all local data?") },
+            text = {
+                Text(
+                    "This permanently deletes your profile, nutrition and workout history, " +
+                        "weight data, settings, encrypted credential, pending sync work, " +
+                        "captures, and exports from this device. Data already sent to n8n is " +
+                        "not deleted. This action cannot be undone."
+                )
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDeleteConfirmation = false },
+                    enabled = !uiState.deletingLocalData
+                ) { Text("Cancel") }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        onDeleteAllLocalData()
+                    },
+                    enabled = !uiState.deletingLocalData,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Delete permanently") }
+            }
+        )
+    }
+
     AdaptiveColumn {
-        SettingsHeader("Privacy & Data", onBack)
+        SettingsHeader("Privacy & Data") {
+            if (!uiState.deletingLocalData) onBack()
+        }
         SectionCard(title = "Photo analysis") {
             SwitchRow(
                 "Meal photo analysis",
                 "When enabled, capturing a meal immediately uploads the photo to your configured n8n endpoint for analysis.",
                 uiState.mealPhotoAnalysisEnabled,
-                onMealPhotoAnalysisChange
+                if (uiState.deletingLocalData) null else onMealPhotoAnalysisChange
             )
             SwitchRow("Temporary photos only", "Captured photos stay in temporary app storage and are removed after processing.", true, null)
             Text("You can turn meal photo uploads off here at any time. Barcode lookup contacts n8n only when you request it.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         SectionCard(title = "Your data") {
-            Text("Nutrition, workouts, profile, and weight history are stored locally and may be included in Android device backup. Sync sends those records to n8n only when enabled; scanner requests are sent when you explicitly run them.")
-            Button(onClick = onGenerateExport, modifier = Modifier.fillMaxWidth()) { Text("Prepare JSON export") }
+            Text("Nutrition, workouts, profile, and weight history are stored locally and excluded from Android cloud backup and device transfer. Sync sends those records to n8n only when enabled; scanner requests are sent when you explicitly run them.")
+            Button(
+                onClick = onGenerateExport,
+                enabled = !uiState.deletingLocalData,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Prepare JSON export") }
             uiState.exportStatus?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             uiState.exportFilePath?.let { path ->
                 OutlinedButton(
                     onClick = {
-                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", File(path))
-                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                            type = "application/json"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }, "Share FitNS export"))
+                        runCatching {
+                            val exportFile = File(path)
+                            check(exportFile.isFile) { "Export file is no longer available" }
+                            val uri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.files",
+                                exportFile
+                            )
+                            context.startActivity(
+                                Intent.createChooser(
+                                    Intent(Intent.ACTION_SEND).apply {
+                                        type = "application/json"
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    },
+                                    "Share FitNS export"
+                                )
+                            )
+                        }.onFailure {
+                            Toast.makeText(
+                                context,
+                                "The export could not be shared. Prepare a new export and try again.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     },
+                    enabled = !uiState.deletingLocalData,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Share export") }
+            }
+        }
+        SectionCard(
+            title = "Delete local data",
+            subtitle = "This does not delete data that was already sent to your n8n endpoint."
+        ) {
+            Text(
+                "Permanently remove all FitNS data and credentials stored on this device, then return to onboarding.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            uiState.localDataDeletionError?.let { ErrorBanner(it) }
+            Button(
+                onClick = { showDeleteConfirmation = true },
+                enabled = !uiState.deletingLocalData,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (uiState.deletingLocalData) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onError
+                    )
+                    Text("Deleting…", modifier = Modifier.padding(start = 10.dp))
+                } else {
+                    Text("Delete all local data")
+                }
             }
         }
     }

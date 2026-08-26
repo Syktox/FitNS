@@ -7,6 +7,7 @@ import android.util.Base64
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.nio.charset.StandardCharsets
 import java.security.KeyStore
+import java.io.IOException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -53,7 +54,18 @@ class EncryptedTokenStore @Inject constructor(
     fun hasToken(): Boolean = preferences.contains(KeyToken)
 
     fun clear() {
-        preferences.edit().remove(KeyToken).remove(KeyIv).apply()
+        val preferencesCleared = preferences.edit()
+            .remove(KeyToken)
+            .remove(KeyIv)
+            .commit()
+        if (!preferencesCleared) {
+            throw IOException("Encrypted credential storage could not be cleared")
+        }
+
+        val keyStore = KeyStore.getInstance(KeyStoreName).apply { load(null) }
+        if (keyStore.containsAlias(KeyAlias)) {
+            keyStore.deleteEntry(KeyAlias)
+        }
     }
 
     private fun getOrCreateKey(): SecretKey {

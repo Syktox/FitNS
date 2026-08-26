@@ -12,6 +12,7 @@ import com.raysix.fitns.data.local.entity.SyncStatus
 import com.raysix.fitns.domain.repository.SettingsRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -44,6 +45,7 @@ class SyncWorker @AssistedInject constructor(
                     syncQueueDao.updateStatus(item.id, SyncStatus.Synced, System.currentTimeMillis())
                 } else {
                     val error = result.exceptionOrNull()
+                    if (error is CancellationException) throw error
                     if (error is PermanentSyncException) {
                         syncQueueDao.markTerminalFailure(
                             id = item.id,

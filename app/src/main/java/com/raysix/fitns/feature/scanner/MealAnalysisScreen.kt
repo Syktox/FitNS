@@ -30,6 +30,7 @@ import com.raysix.fitns.core.design.ErrorBanner
 import com.raysix.fitns.core.design.ModernCard
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionTitle
+import com.raysix.fitns.core.input.toUserDecimalOrNull
 import com.raysix.fitns.domain.model.MealType
 import kotlin.math.roundToInt
 
@@ -170,10 +171,10 @@ fun MealAnalysisScreen(
 
 @Composable
 private fun MealMacroSummary(items: List<EditableMealItem>) {
-    val calories = items.sumOf { it.calories.toDoubleOrNull() ?: 0.0 }
-    val protein = items.sumOf { it.protein.toDoubleOrNull() ?: 0.0 }
-    val carbs = items.sumOf { it.carbs.toDoubleOrNull() ?: 0.0 }
-    val fat = items.sumOf { it.fat.toDoubleOrNull() ?: 0.0 }
+    val calories = items.sumOf { it.calories.toUserDecimalOrNull() ?: 0.0 }
+    val protein = items.sumOf { it.protein.toUserDecimalOrNull() ?: 0.0 }
+    val carbs = items.sumOf { it.carbs.toUserDecimalOrNull() ?: 0.0 }
+    val fat = items.sumOf { it.fat.toUserDecimalOrNull() ?: 0.0 }
 
     ModernCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

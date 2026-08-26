@@ -25,6 +25,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -38,6 +40,7 @@ import com.raysix.fitns.core.design.ProgressRing
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.SectionTitle
+import com.raysix.fitns.core.input.toUserDecimalOrNull
 import com.raysix.fitns.domain.model.BodyWeightLogEntry
 import java.time.Instant
 import java.time.ZoneId
@@ -93,7 +96,7 @@ fun BodyWeightScreen(
                 notes = notes,
                 onNotesChange = { notes = it },
                 onSave = {
-                    onAddEntry(weight.toDoubleOrNull() ?: 0.0, notes)
+                    onAddEntry(weight.toUserDecimalOrNull() ?: 0.0, notes)
                     weight = ""
                     notes = ""
                 },
@@ -129,12 +132,21 @@ private fun NewEntryCard(
     onSave: () -> Unit,
     errorMessage: String?
 ) {
+    val parsedWeight = weight.toUserDecimalOrNull()
+    val weightIsValid = parsedWeight != null && parsedWeight > 0.0 && parsedWeight <= 500.0
+
     SectionCard(title = "New Entry") {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(
                 value = weight,
                 onValueChange = onWeightChange,
                 label = { Text("Weight kg") },
+                isError = weight.isNotBlank() && !weightIsValid,
+                supportingText = if (weight.isNotBlank() && !weightIsValid) {
+                    { Text("Enter a weight between 0 and 500 kg.") }
+                } else {
+                    null
+                },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -148,9 +160,10 @@ private fun NewEntryCard(
             )
             Surface(
                 onClick = onSave,
+                enabled = weightIsValid,
                 shape = RoundedCornerShape(999.dp),
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                color = if (weightIsValid) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = if (weightIsValid) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
@@ -314,6 +327,13 @@ private fun BodyWeightTrendChart(
             .fillMaxWidth()
             .height(104.dp)
             .padding(top = 8.dp)
+            .semantics {
+                contentDescription = if (points.isEmpty()) {
+                    "Body weight trend. No measurements yet."
+                } else {
+                    "Body weight trend with ${points.size} measurements, from ${points.first().formatKg()} to ${points.last().formatKg()}."
+                }
+            }
     ) {
         if (points.size < 2) {
             drawLine(

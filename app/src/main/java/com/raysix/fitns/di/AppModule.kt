@@ -14,12 +14,14 @@ import com.raysix.fitns.data.local.dao.ProfileDao
 import com.raysix.fitns.data.local.dao.SyncQueueDao
 import com.raysix.fitns.data.local.dao.WorkoutDao
 import com.raysix.fitns.data.repository.DataStoreSettingsRepository
+import com.raysix.fitns.data.repository.DefaultLocalDataDeletionRepository
 import com.raysix.fitns.data.repository.LocalBodyWeightRepository
 import com.raysix.fitns.data.repository.LocalNutritionRepository
 import com.raysix.fitns.data.repository.LocalProfileRepository
 import com.raysix.fitns.data.repository.LocalWorkoutRepository
 import com.raysix.fitns.data.repository.RemoteN8nRepository
 import com.raysix.fitns.domain.repository.N8nRepository
+import com.raysix.fitns.domain.repository.LocalDataDeletionRepository
 import com.raysix.fitns.domain.repository.BodyWeightRepository
 import com.raysix.fitns.domain.repository.NutritionRepository
 import com.raysix.fitns.domain.repository.ProfileRepository
@@ -108,6 +110,12 @@ object AppModule {
     @Provides
     @Singleton
     fun provideN8nRepository(repository: RemoteN8nRepository): N8nRepository = repository
+
+    @Provides
+    @Singleton
+    fun provideLocalDataDeletionRepository(
+        repository: DefaultLocalDataDeletionRepository
+    ): LocalDataDeletionRepository = repository
 
     @Provides
     @Singleton

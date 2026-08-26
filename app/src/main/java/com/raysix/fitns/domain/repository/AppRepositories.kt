@@ -101,6 +101,17 @@ interface N8nRepository {
     ): AppResult<MealAnalysisResult>
 }
 
+/**
+ * Owns the destructive, app-wide deletion of data stored on this device.
+ *
+ * A successful result means every local deletion step completed. Callers must
+ * keep the user in the current flow when a failure is returned because some
+ * steps may already have completed and a retry can still be required.
+ */
+interface LocalDataDeletionRepository {
+    suspend fun deleteAllLocalData(): AppResult<Unit>
+}
+
 interface SettingsRepository {
     fun observeN8nSettings(): Flow<N8nConnectionSettings>
     fun observeTemporaryPhotosOnly(): Flow<Boolean>
@@ -121,4 +132,5 @@ interface SettingsRepository {
     suspend fun setBearerToken(token: String)
     suspend fun readBearerToken(): String?
     suspend fun clearBearerToken()
+    suspend fun clearAllLocalSettings()
 }

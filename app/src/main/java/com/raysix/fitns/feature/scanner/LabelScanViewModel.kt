@@ -10,6 +10,7 @@ import com.google.android.gms.tasks.Task
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.raysix.fitns.core.input.toUserDecimalOrNull
 import com.raysix.fitns.domain.model.DataQuality
 import com.raysix.fitns.domain.model.MealType
 import com.raysix.fitns.domain.model.Micronutrients
@@ -75,11 +76,15 @@ class LabelScanViewModel @Inject constructor(
             }
             state.value = state.value.copy(previewBitmap = bitmap.asImageBitmap())
 
-            val recognized = runCatching {
+            val recognized = try {
                 withContext(Dispatchers.Default) {
                     recognizer.process(InputImage.fromBitmap(bitmap, 0)).await().text
                 }
-            }.getOrNull()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
 
             if (recognized.isNullOrBlank()) {
                 state.value = state.value.copy(
@@ -130,20 +135,20 @@ class LabelScanViewModel @Inject constructor(
 
     fun apply(onApplied: (ManualFoodInput) -> Unit) {
         val snapshot = state.value
-        val grams = snapshot.basisGrams.toDoubleOrNull() ?: 100.0
+        val grams = snapshot.basisGrams.toUserDecimalOrNull() ?: 100.0
         val input = ManualFoodInput(
             name = snapshot.name.ifBlank { "Scanned product" },
             brand = null,
             grams = grams,
-            calories = snapshot.calories.toDoubleOrNull() ?: 0.0,
-            protein = snapshot.protein.toDoubleOrNull() ?: 0.0,
-            carbohydrates = snapshot.carbs.toDoubleOrNull() ?: 0.0,
-            sugar = snapshot.sugar.toDoubleOrNull() ?: 0.0,
-            fat = snapshot.fat.toDoubleOrNull() ?: 0.0,
-            saturatedFat = snapshot.saturatedFat.toDoubleOrNull() ?: 0.0,
-            fiber = snapshot.fiber.toDoubleOrNull() ?: 0.0,
-            salt = snapshot.salt.toDoubleOrNull() ?: 0.0,
-            sodiumMilligrams = snapshot.sodium.toDoubleOrNull(),
+            calories = snapshot.calories.toUserDecimalOrNull() ?: 0.0,
+            protein = snapshot.protein.toUserDecimalOrNull() ?: 0.0,
+            carbohydrates = snapshot.carbs.toUserDecimalOrNull() ?: 0.0,
+            sugar = snapshot.sugar.toUserDecimalOrNull() ?: 0.0,
+            fat = snapshot.fat.toUserDecimalOrNull() ?: 0.0,
+            saturatedFat = snapshot.saturatedFat.toUserDecimalOrNull() ?: 0.0,
+            fiber = snapshot.fiber.toUserDecimalOrNull() ?: 0.0,
+            salt = snapshot.salt.toUserDecimalOrNull() ?: 0.0,
+            sodiumMilligrams = snapshot.sodium.toUserDecimalOrNull(),
             mealType = MealType.Snack,
             notes = buildString {
                 append("Values from nutrition label OCR.")
@@ -168,11 +173,17 @@ class LabelScanViewModel @Inject constructor(
     }
 
     private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { continuation ->
-        addOnSuccessListener { continuation.resume(it) }
-        addOnFailureListener { e ->
-            if (e is CancellationException) continuation.cancel(e) else continuation.resumeWithException(e)
+        addOnSuccessListener {
+            if (continuation.isActive) continuation.resume(it)
         }
-        addOnCanceledListener { continuation.cancel() }
+        addOnFailureListener { e ->
+            if (continuation.isActive) {
+                if (e is CancellationException) continuation.cancel(e) else continuation.resumeWithException(e)
+            }
+        }
+        addOnCanceledListener {
+            if (continuation.isActive) continuation.cancel()
+        }
     }
 }
 

@@ -35,6 +35,7 @@ import com.raysix.fitns.core.design.BiologicalSexDropdown
 import com.raysix.fitns.core.design.FitnessGoalSelector
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
+import com.raysix.fitns.core.input.toUserDecimalOrNull
 import com.raysix.fitns.domain.model.NutritionGoal
 import com.raysix.fitns.domain.model.UserProfile
 import com.raysix.fitns.domain.usecase.NutritionGoalEstimator
@@ -134,7 +135,7 @@ fun ProfileScreen(
                     Surface(
                         onClick = {
                             val estimate = NutritionGoalEstimator.estimate(
-                                weightKg = weight.toDoubleOrNull(),
+                                weightKg = weight.toUserDecimalOrNull(),
                                 goal = goalName.ifBlank { "Maintain" },
                                 activityLevel = activity.ifBlank { "Moderate" }
                             )
@@ -183,20 +184,20 @@ fun ProfileScreen(
                         UserProfile(
                             age = age.toIntOrNull(),
                             sexOrPhysiology = physiology.ifBlank { null },
-                            heightCm = height.toDoubleOrNull(),
-                            weightKg = weight.toDoubleOrNull(),
-                            targetWeightKg = targetWeight.toDoubleOrNull(),
+                            heightCm = height.toUserDecimalOrNull(),
+                            weightKg = weight.toUserDecimalOrNull(),
+                            targetWeightKg = targetWeight.toUserDecimalOrNull(),
                             activityLevel = activity.ifBlank { "Moderate" },
                             trainingDaysPerWeek = trainingDays.toIntOrNull() ?: 0,
                             goal = goalName.ifBlank { "Maintain" }
                         ),
                         NutritionGoal(
-                            caloriesKcal = calories.toDoubleOrNull() ?: 0.0,
-                            proteinGrams = protein.toDoubleOrNull() ?: 0.0,
-                            carbohydrateGrams = carbs.toDoubleOrNull() ?: 0.0,
-                            fatGrams = fat.toDoubleOrNull() ?: 0.0,
-                            fiberGrams = fiber.toDoubleOrNull() ?: 0.0,
-                            waterMilliliters = water.toDoubleOrNull() ?: 0.0
+                            caloriesKcal = calories.toUserDecimalOrNull() ?: 0.0,
+                            proteinGrams = protein.toUserDecimalOrNull() ?: 0.0,
+                            carbohydrateGrams = carbs.toUserDecimalOrNull() ?: 0.0,
+                            fatGrams = fat.toUserDecimalOrNull() ?: 0.0,
+                            fiberGrams = fiber.toUserDecimalOrNull() ?: 0.0,
+                            waterMilliliters = water.toUserDecimalOrNull() ?: 0.0
                         )
                     )
                 },
@@ -252,12 +253,12 @@ fun NutritionGoalsSettingsScreen(
     }
 
     val editedGoal = NutritionGoal(
-        caloriesKcal = calories.toDoubleOrNull() ?: 0.0,
-        proteinGrams = protein.toDoubleOrNull() ?: 0.0,
-        carbohydrateGrams = carbs.toDoubleOrNull() ?: 0.0,
-        fatGrams = fat.toDoubleOrNull() ?: 0.0,
-        fiberGrams = fiber.toDoubleOrNull() ?: 0.0,
-        waterMilliliters = water.toDoubleOrNull() ?: 0.0
+        caloriesKcal = calories.toUserDecimalOrNull() ?: 0.0,
+        proteinGrams = protein.toUserDecimalOrNull() ?: 0.0,
+        carbohydrateGrams = carbs.toUserDecimalOrNull() ?: 0.0,
+        fatGrams = fat.toUserDecimalOrNull() ?: 0.0,
+        fiberGrams = fiber.toUserDecimalOrNull() ?: 0.0,
+        waterMilliliters = water.toUserDecimalOrNull() ?: 0.0
     )
     val canSave = editedGoal.caloriesKcal in 800.0..8000.0 &&
         editedGoal.proteinGrams >= 0.0 &&
@@ -347,7 +348,7 @@ private fun NumericField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    modifier: Modifier = Modifier.fillMaxWidth()
+    modifier: Modifier = Modifier
 ) {
     OutlinedTextField(
         value = value,
@@ -355,7 +356,7 @@ private fun NumericField(
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         shape = RoundedCornerShape(16.dp),
-        modifier = modifier
+        modifier = modifier.fillMaxWidth()
     )
 }
 

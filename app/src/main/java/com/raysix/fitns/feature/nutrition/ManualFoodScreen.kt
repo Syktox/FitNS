@@ -35,6 +35,7 @@ import com.raysix.fitns.core.design.AdaptiveGutterLayout
 import com.raysix.fitns.core.design.ModernCard
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
+import com.raysix.fitns.core.input.toUserDecimalOrNull
 import com.raysix.fitns.domain.model.DataQuality
 import com.raysix.fitns.domain.model.MealType
 import com.raysix.fitns.domain.model.Micronutrients
@@ -86,6 +87,12 @@ fun ManualFoodScreen(
     var notes by rememberSaveable { mutableStateOf("") }
     var mealTypeName by rememberSaveable { mutableStateOf(MealType.Snack.name) }
     val mealType = MealType.entries.firstOrNull { it.name == mealTypeName } ?: MealType.Snack
+    val gramsValue = grams.toUserDecimalOrNull()
+    val optionalNutritionValues = listOf(calories, protein, carbs, sugar, fat, saturatedFat, fiber, salt, sodium)
+    val nutritionValuesAreValid = optionalNutritionValues.all { value ->
+        value.isBlank() || value.toUserDecimalOrNull()?.let { it >= 0.0 } == true
+    }
+    val canSave = name.isNotBlank() && gramsValue?.let { it > 0.0 } == true && nutritionValuesAreValid
 
     LaunchedEffect(barcodeLookup.prefillInput) {
         barcodeLookup.prefillInput?.let { input ->
@@ -190,25 +197,26 @@ fun ManualFoodScreen(
                             ManualFoodInput(
                                 name = name,
                                 brand = brand.ifBlank { null },
-                                grams = grams.toDoubleOrNull() ?: 0.0,
-                                calories = calories.toDoubleOrNull() ?: 0.0,
-                                protein = protein.toDoubleOrNull() ?: 0.0,
-                                carbohydrates = carbs.toDoubleOrNull() ?: 0.0,
-                                sugar = sugar.toDoubleOrNull() ?: 0.0,
-                                fat = fat.toDoubleOrNull() ?: 0.0,
-                                saturatedFat = saturatedFat.toDoubleOrNull() ?: 0.0,
-                                fiber = fiber.toDoubleOrNull() ?: 0.0,
-                                salt = salt.toDoubleOrNull() ?: 0.0,
-                                sodiumMilligrams = sodium.toDoubleOrNull(),
+                                grams = grams.toUserDecimalOrNull() ?: 0.0,
+                                calories = calories.toUserDecimalOrNull() ?: 0.0,
+                                protein = protein.toUserDecimalOrNull() ?: 0.0,
+                                carbohydrates = carbs.toUserDecimalOrNull() ?: 0.0,
+                                sugar = sugar.toUserDecimalOrNull() ?: 0.0,
+                                fat = fat.toUserDecimalOrNull() ?: 0.0,
+                                saturatedFat = saturatedFat.toUserDecimalOrNull() ?: 0.0,
+                                fiber = fiber.toUserDecimalOrNull() ?: 0.0,
+                                salt = salt.toUserDecimalOrNull() ?: 0.0,
+                                sodiumMilligrams = sodium.toUserDecimalOrNull(),
                                 mealType = mealType,
                                 notes = notes
                             )
                         )
                     },
+                    enabled = canSave,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                    color = if (canSave) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+                    contentColor = if (canSave) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                 ) {
                     Text(
                         "Save",
@@ -343,7 +351,7 @@ private fun NumericField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    modifier: Modifier = Modifier.fillMaxWidth()
+    modifier: Modifier = Modifier
 ) {
     OutlinedTextField(
         value = value,
@@ -351,7 +359,7 @@ private fun NumericField(
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         shape = RoundedCornerShape(16.dp),
-        modifier = modifier
+        modifier = modifier.fillMaxWidth()
     )
 }
 

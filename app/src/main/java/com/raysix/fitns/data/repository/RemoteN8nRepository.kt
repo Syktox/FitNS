@@ -20,6 +20,7 @@ import java.net.SocketTimeoutException
 import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 
 class RemoteN8nRepository @Inject constructor(
     private val serviceFactory: N8nServiceFactory
@@ -36,6 +37,8 @@ class RemoteN8nRepository @Inject constructor(
                 response.code() == 404 -> AppResult.Failure(AppError.NotFound)
                 else -> AppResult.Failure(AppError.Remote(response.code(), "n8n rejected the health check."))
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (_: SocketTimeoutException) {
             AppResult.Failure(AppError.Timeout)
         } catch (_: IOException) {
@@ -84,6 +87,8 @@ class RemoteN8nRepository @Inject constructor(
                 response.code() == 404 -> AppResult.Failure(AppError.NotFound)
                 else -> AppResult.Failure(AppError.Remote(response.code(), "n8n rejected the barcode lookup."))
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (_: SocketTimeoutException) {
             AppResult.Failure(AppError.Timeout)
         } catch (_: IOException) {
@@ -141,6 +146,8 @@ class RemoteN8nRepository @Inject constructor(
                 response.code() == 404 -> AppResult.Failure(AppError.NotFound)
                 else -> AppResult.Failure(AppError.Remote(response.code(), "n8n rejected the image analysis."))
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (_: SocketTimeoutException) {
             AppResult.Failure(AppError.Timeout)
         } catch (_: IOException) {

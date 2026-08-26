@@ -28,6 +28,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -225,7 +228,7 @@ fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun TagChip(text: String, accent: Boolean = false, modifier: Modifier = Modifier) {
+fun TagChip(text: String, modifier: Modifier = Modifier, accent: Boolean = false) {
     Surface(
         shape = RoundedCornerShape(999.dp),
         color = if (accent) {
@@ -296,7 +299,12 @@ fun ProgressRing(
     content: (@Composable BoxScope.() -> Unit)? = null
 ) {
     val clamped = progress.coerceIn(0f, 1f)
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+    Box(
+        modifier = modifier.semantics {
+            progressBarRangeInfo = ProgressBarRangeInfo(clamped, 0f..1f)
+        },
+        contentAlignment = Alignment.Center
+    ) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val strokePx = stroke.toPx()
             val diameter = size.minDimension - strokePx
@@ -330,16 +338,18 @@ fun PillButton(
     text: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
-    filled: Boolean = true
+    filled: Boolean = true,
+    enabled: Boolean = true
 ) {
     val shape = RoundedCornerShape(999.dp)
     if (filled) {
         Surface(
             onClick = onClick,
+            enabled = enabled,
             modifier = modifier,
             shape = shape,
-            color = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary
+            color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+            contentColor = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
         ) {
             Text(
                 text,
@@ -351,11 +361,15 @@ fun PillButton(
     } else {
         Surface(
             onClick = onClick,
+            enabled = enabled,
             modifier = modifier,
             shape = shape,
             color = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.primary,
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.outlineVariant)
+            contentColor = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            border = androidx.compose.foundation.BorderStroke(
+                1.5.dp,
+                if (enabled) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
         ) {
             Text(
                 text,

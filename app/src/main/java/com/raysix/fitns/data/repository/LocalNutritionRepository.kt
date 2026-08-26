@@ -64,14 +64,14 @@ class LocalNutritionRepository @Inject constructor(
             val end = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
             combine(
                 foodDao.observeFoodEntriesForPeriod(start, end),
-                foodDao.observeDailySummary(start),
+                foodDao.observeDailyWaterTotal(start),
                 profileRepository.observeNutritionGoal()
-            ) { entities, summary, goal ->
+            ) { entities, waterMilliliters, goal ->
                 val entries = entities.map { it.toDomain() }
                 DailyNutritionDashboard(
                     goal = goal,
                     total = nutritionCalculator.summarize(entries),
-                    waterMilliliters = summary?.waterMilliliters ?: 0.0,
+                    waterMilliliters = waterMilliliters,
                     entries = entries
                 )
             }
@@ -256,6 +256,8 @@ class LocalNutritionRepository @Inject constructor(
     override suspend fun saveMeal(meal: SavedMeal): AppResult<Unit> {
         if (meal.name.isBlank()) return AppResult.Failure(AppError.Validation("Meal name is required."))
         if (meal.items.isEmpty()) return AppResult.Failure(AppError.Validation("Save at least one food in a meal."))
+        meal.items.firstNotNullOfOrNull { validate(it.food) }
+            ?.let { return AppResult.Failure(it) }
         val now = System.currentTimeMillis()
         foodDao.upsertSavedMealWithItems(
             meal = SavedMealEntity(
@@ -280,6 +282,9 @@ class LocalNutritionRepository @Inject constructor(
     }
 
     override suspend fun logSavedMeal(meal: SavedMeal, scaleFactor: Double, mealType: MealType): AppResult<Unit> {
+        if (!scaleFactor.isFinite() || scaleFactor <= 0.0) {
+            return AppResult.Failure(AppError.Validation("Meal scale must be a finite number greater than zero."))
+        }
         return copyEntries(
             entries = mealScaler.scale(meal.items.map { it.food }, scaleFactor)
                 .map { it.copy(mealType = mealType) },
@@ -315,47 +320,47 @@ class LocalNutritionRepository @Inject constructor(
     }
 
     override suspend fun addWater(milliliters: Double): AppResult<Unit> {
-        if (milliliters <= 0.0) return AppResult.Failure(AppError.Validation("Water amount must be greater than zero."))
+        if (!milliliters.isFinite() || milliliters <= 0.0) {
+            return AppResult.Failure(AppError.Validation("Water amount must be a finite number greater than zero."))
+        }
         if (milliliters > 3000.0) return AppResult.Failure(AppError.Validation("Water amount looks implausibly high."))
 
         val zone = ZoneId.systemDefault()
         val dayStartMillis = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
         val now = System.currentTimeMillis()
-        val existing = foodDao.findDailySummary(dayStartMillis)
-        val updated = existing?.copy(
-            waterMilliliters = existing.waterMilliliters + milliliters,
-            updatedAt = now,
-            syncStatus = SyncStatus.PendingSync
-        ) ?: DailyNutritionSummaryEntity(
-            id = UUID.randomUUID().toString(),
+        foodDao.addWaterAtomically(
             dayStartMillis = dayStartMillis,
-            caloriesKcal = 0.0,
-            proteinGrams = 0.0,
-            carbohydratesGrams = 0.0,
-            fatGrams = 0.0,
-            fiberGrams = 0.0,
-            waterMilliliters = milliliters,
-            createdAt = now,
+            milliliters = milliliters,
             updatedAt = now,
-            deletedAt = null,
-            syncStatus = SyncStatus.PendingSync,
-            serverVersion = null
+            summaryIfMissing = DailyNutritionSummaryEntity(
+                id = UUID.randomUUID().toString(),
+                dayStartMillis = dayStartMillis,
+                caloriesKcal = 0.0,
+                proteinGrams = 0.0,
+                carbohydratesGrams = 0.0,
+                fatGrams = 0.0,
+                fiberGrams = 0.0,
+                waterMilliliters = milliliters,
+                createdAt = now,
+                updatedAt = now,
+                deletedAt = null,
+                syncStatus = SyncStatus.PendingSync,
+                serverVersion = null
+            )
         )
-        foodDao.upsertDailySummary(updated)
         return AppResult.Success(Unit)
     }
 
     override suspend fun removeWater(milliliters: Double): AppResult<Unit> {
-        if (milliliters <= 0.0) return AppResult.Failure(AppError.Validation("Water amount must be greater than zero."))
+        if (!milliliters.isFinite() || milliliters <= 0.0) {
+            return AppResult.Failure(AppError.Validation("Water amount must be a finite number greater than zero."))
+        }
         val zone = ZoneId.systemDefault()
         val dayStartMillis = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
-        val existing = foodDao.findDailySummary(dayStartMillis) ?: return AppResult.Success(Unit)
-        foodDao.upsertDailySummary(
-            existing.copy(
-                waterMilliliters = (existing.waterMilliliters - milliliters).coerceAtLeast(0.0),
-                updatedAt = System.currentTimeMillis(),
-                syncStatus = SyncStatus.PendingSync
-            )
+        foodDao.removeWaterAtomically(
+            dayStartMillis = dayStartMillis,
+            milliliters = milliliters,
+            updatedAt = System.currentTimeMillis()
         )
         return AppResult.Success(Unit)
     }
@@ -378,16 +383,19 @@ class LocalNutritionRepository @Inject constructor(
 
     private fun validate(entry: FoodLogEntry): AppError? {
         return when {
-            entry.grams < 0.0 -> AppError.Validation("Amount in grams cannot be negative.")
-            entry.nutrition.caloriesKcal < 0.0 -> AppError.Validation("Calories cannot be negative.")
-            entry.nutrition.proteinGrams < 0.0 -> AppError.Validation("Protein cannot be negative.")
-            entry.nutrition.carbohydratesGrams < 0.0 -> AppError.Validation("Carbs cannot be negative.")
-            entry.nutrition.sugarGrams < 0.0 -> AppError.Validation("Sugar cannot be negative.")
-            entry.nutrition.fatGrams < 0.0 -> AppError.Validation("Fat cannot be negative.")
-            entry.nutrition.saturatedFatGrams < 0.0 -> AppError.Validation("Saturated fat cannot be negative.")
-            entry.nutrition.fiberGrams < 0.0 -> AppError.Validation("Fiber cannot be negative.")
-            entry.nutrition.saltGrams < 0.0 -> AppError.Validation("Salt cannot be negative.")
-            (entry.nutrition.sodiumMilligrams ?: 0.0) < 0.0 -> AppError.Validation("Sodium cannot be negative.")
+            entry.name.isBlank() -> AppError.Validation("Food name is required.")
+            !entry.grams.isFinite() || entry.grams <= 0.0 -> AppError.Validation("Amount in grams must be a finite number greater than zero.")
+            !entry.nutrition.caloriesKcal.isFinite() || entry.nutrition.caloriesKcal < 0.0 -> AppError.Validation("Calories must be finite and non-negative.")
+            !entry.nutrition.proteinGrams.isFinite() || entry.nutrition.proteinGrams < 0.0 -> AppError.Validation("Protein must be finite and non-negative.")
+            !entry.nutrition.carbohydratesGrams.isFinite() || entry.nutrition.carbohydratesGrams < 0.0 -> AppError.Validation("Carbs must be finite and non-negative.")
+            !entry.nutrition.sugarGrams.isFinite() || entry.nutrition.sugarGrams < 0.0 -> AppError.Validation("Sugar must be finite and non-negative.")
+            !entry.nutrition.fatGrams.isFinite() || entry.nutrition.fatGrams < 0.0 -> AppError.Validation("Fat must be finite and non-negative.")
+            !entry.nutrition.saturatedFatGrams.isFinite() || entry.nutrition.saturatedFatGrams < 0.0 -> AppError.Validation("Saturated fat must be finite and non-negative.")
+            !entry.nutrition.fiberGrams.isFinite() || entry.nutrition.fiberGrams < 0.0 -> AppError.Validation("Fiber must be finite and non-negative.")
+            !entry.nutrition.saltGrams.isFinite() || entry.nutrition.saltGrams < 0.0 -> AppError.Validation("Salt must be finite and non-negative.")
+            entry.nutrition.sodiumMilligrams?.let { !it.isFinite() || it < 0.0 } == true -> AppError.Validation("Sodium must be finite and non-negative.")
+            entry.micronutrients.values.values.any { !it.amount.isFinite() || it.amount < 0.0 } ->
+                AppError.Validation("Micronutrient amounts must be finite and non-negative.")
             else -> null
         }
     }

@@ -16,20 +16,27 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -69,7 +77,7 @@ fun BarcodeScannerScreen(
         )
     }
     var detecting by remember { mutableStateOf(true) }
-    var scanAttempt by remember { mutableStateOf(0) }
+    var scanAttempt by remember { mutableIntStateOf(0) }
     var statusMessage by remember { mutableStateOf("Align a barcode within the frame") }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -120,10 +128,11 @@ fun BarcodeScannerScreen(
         }
     }
 
-    LaunchedEffect(hasCameraPermission) {
+    LaunchedEffect(hasCameraPermission, scanAttempt) {
         if (!hasCameraPermission) return@LaunchedEffect
         val provider = runCatching { cameraProvider(context) }.getOrElse {
             statusMessage = "Camera could not be started. Try again."
+            detecting = false
             return@LaunchedEffect
         }
         val preview = Preview.Builder().build().also {
@@ -157,16 +166,17 @@ fun BarcodeScannerScreen(
                 }
                 .addOnCompleteListener { imageProxy.close() }
         }
-        provider.unbindAll()
         runCatching {
+            provider.unbindAll()
             provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
             boundProvider = provider
         }.onFailure {
             statusMessage = "Camera could not be started. Try again."
+            detecting = false
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
@@ -176,96 +186,197 @@ fun BarcodeScannerScreen(
                 factory = { previewView },
                 modifier = Modifier.fillMaxSize()
             )
+        }
+
+        val useSidePanel = maxHeight < 480.dp || maxWidth > maxHeight
+        val portraitPanelMaxHeight = maxHeight * 0.34f
+        val retryScan = {
+            detecting = true
+            scanAttempt += 1
+            statusMessage = "Align a barcode within the frame"
+        }
+
+        if (useSidePanel) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                BarcodeTargetArea(
+                    hasCameraPermission = hasCameraPermission,
+                    modifier = Modifier
+                        .weight(0.64f)
+                        .fillMaxHeight()
+                )
+                BarcodeControlPanel(
+                    statusMessage = statusMessage,
+                    hasCameraPermission = hasCameraPermission,
+                    detecting = detecting,
+                    showCancel = true,
+                    onCancel = onCancel,
+                    onGrantPermission = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                    onRetry = retryScan,
+                    modifier = Modifier
+                        .weight(0.36f)
+                        .fillMaxHeight()
+                )
+            }
         } else {
             Column(
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "Camera permission is required to scan barcodes.",
-                    color = Color.White,
-                    textAlign = TextAlign.Center
+                BarcodeCancelButton(onClick = onCancel)
+                BarcodeTargetArea(
+                    hasCameraPermission = hasCameraPermission,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
                 )
-                Surface(
-                    onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primary,
+                BarcodeControlPanel(
+                    statusMessage = statusMessage,
+                    hasCameraPermission = hasCameraPermission,
+                    detecting = detecting,
+                    showCancel = false,
+                    onCancel = onCancel,
+                    onGrantPermission = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                    onRetry = retryScan,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 16.dp)
-                ) {
-                    Text(
-                        text = "Grant permission",
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 14.dp)
-                    )
-                }
+                        .heightIn(max = portraitPanelMaxHeight)
+                )
             }
         }
+    }
+}
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .size(280.dp)
-                .border(3.dp, Color.White, RoundedCornerShape(16.dp))
-        )
-
-        Surface(
-            onClick = onCancel,
-            shape = RoundedCornerShape(50),
-            color = Color(0xCC2A2A2A),
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(16.dp)
-        ) {
+@Composable
+private fun BarcodeTargetArea(
+    hasCameraPermission: Boolean,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        if (hasCameraPermission) {
+            val frameSize = minOf(maxWidth * 0.78f, maxHeight * 0.78f, 320.dp)
+            if (frameSize > 0.dp) {
+                Box(
+                    modifier = Modifier
+                        .size(frameSize)
+                        .border(3.dp, Color.White, RoundedCornerShape(18.dp))
+                )
+            }
+        } else {
             Text(
-                text = "Cancel",
-                color = Color.White,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                text = "Camera preview unavailable",
+                color = Color.White.copy(alpha = 0.82f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(20.dp)
             )
         }
+    }
+}
 
+@Composable
+private fun BarcodeControlPanel(
+    statusMessage: String,
+    hasCameraPermission: Boolean,
+    detecting: Boolean,
+    showCancel: Boolean,
+    onCancel: () -> Unit,
+    onGrantPermission: () -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = Color.Black.copy(alpha = 0.74f),
+        contentColor = Color.White
+    ) {
         Column(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = statusMessage,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
-            if (hasCameraPermission && !detecting) {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp)
-                ) {
-                    Surface(
-                        onClick = {
-                            detecting = true
-                            scanAttempt += 1
-                            statusMessage = "Align a barcode within the frame"
-                        },
-                        shape = RoundedCornerShape(50),
-                        color = Color(0xCC2A2A2A)
-                    ) {
-                        Text(
-                            text = "Retry scan",
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                        )
-                    }
+            if (showCancel) {
+                TextButton(onClick = onCancel) {
+                    Text("Cancel", color = Color.White)
                 }
             }
+            Text(
+                text = "Scan barcode",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = statusMessage,
+                color = Color.White.copy(alpha = 0.88f)
+            )
+            when {
+                !hasCameraPermission -> BarcodePanelAction(
+                    text = "Grant camera access",
+                    onClick = onGrantPermission,
+                    primary = true
+                )
+                !detecting -> BarcodePanelAction(
+                    text = "Retry scan",
+                    onClick = onRetry,
+                    primary = false
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun BarcodePanelAction(
+    text: String,
+    onClick: () -> Unit,
+    primary: Boolean
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = if (primary) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.16f),
+        contentColor = if (primary) MaterialTheme.colorScheme.onPrimary else Color.White
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 14.dp)
+        )
+    }
+}
+
+@Composable
+private fun BarcodeCancelButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(999.dp),
+        color = Color.Black.copy(alpha = 0.74f),
+        contentColor = Color.White,
+        modifier = modifier
+    ) {
+        Text(
+            text = "Cancel",
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp)
+        )
     }
 }
 
@@ -274,7 +385,12 @@ private suspend fun cameraProvider(context: Context): ProcessCameraProvider {
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener(
             {
-                continuation.resume(future.get())
+                try {
+                    val provider = future.get()
+                    if (continuation.isActive) continuation.resume(provider)
+                } catch (error: Exception) {
+                    if (continuation.isActive) continuation.resumeWith(Result.failure(error))
+                }
             },
             ContextCompat.getMainExecutor(context)
         )

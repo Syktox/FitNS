@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +45,7 @@ data class WorkoutUiState(
     val restTimer: RestTimerUiState = RestTimerUiState(),
     val personalRecords: List<PersonalRecordEvent> = emptyList(),
     val weeklyStats: WorkoutWeeklyStats = WorkoutWeeklyStats(),
+    val isSavingActiveSession: Boolean = false,
     val errorMessage: String? = null
 )
 
@@ -66,6 +68,11 @@ private data class WorkoutRepositorySnapshot(
     val history: List<WorkoutLogEntry>
 )
 
+private data class WorkoutOperationState(
+    val isSavingActiveSession: Boolean,
+    val errorMessage: String?
+)
+
 @HiltViewModel
 class WorkoutViewModel @Inject constructor(
     private val workoutRepository: WorkoutRepository,
@@ -77,15 +84,26 @@ class WorkoutViewModel @Inject constructor(
 ) : ViewModel() {
     private val activeSessionAdapter = moshi.adapter(ActiveWorkoutSession::class.java)
     private val errorMessage = MutableStateFlow<String?>(null)
+    private val isSavingActiveSession = MutableStateFlow(false)
     private val activeSession = MutableStateFlow(
         savedStateHandle.get<String>(ActiveSessionKey)?.let { json ->
             runCatching { activeSessionAdapter.fromJson(json) }.getOrNull()
         }
     )
-    private val restTimer = MutableStateFlow(RestTimerUiState())
+    private val restTimer = MutableStateFlow(restoreRestTimer())
     private val personalRecords = MutableStateFlow<List<PersonalRecordEvent>>(emptyList())
     private var timerJob: Job? = null
     private var sessionPersistenceJob: Job? = null
+
+    init {
+        val restored = restTimer.value
+        val deadline = savedStateHandle.get<Long>(RestTimerDeadlineKey)
+        if (restored.isRunning && restored.secondsRemaining > 0 && deadline != null) {
+            launchRestTimerTicker(deadline)
+        } else if (restored.secondsRemaining <= 0) {
+            clearPersistedRestTimer()
+        }
+    }
 
     private val repositorySnapshot = combine(
         workoutRepository.observeExercises(),
@@ -99,13 +117,17 @@ class WorkoutViewModel @Inject constructor(
         )
     }
 
+    private val operationState = combine(isSavingActiveSession, errorMessage) { saving, error ->
+        WorkoutOperationState(isSavingActiveSession = saving, errorMessage = error)
+    }
+
     val uiState: StateFlow<WorkoutUiState> = combine(
         repositorySnapshot,
         activeSession,
         restTimer,
         personalRecords,
-        errorMessage
-    ) { snapshot, session, timer, records, error ->
+        operationState
+    ) { snapshot, session, timer, records, operation ->
         WorkoutUiState(
             exercises = snapshot.exercises,
             templates = snapshot.exercises.toWorkoutTemplates(),
@@ -115,7 +137,8 @@ class WorkoutViewModel @Inject constructor(
             restTimer = timer,
             personalRecords = records,
             weeklyStats = snapshot.history.toWeeklyStats(),
-            errorMessage = error
+            isSavingActiveSession = operation.isSavingActiveSession,
+            errorMessage = operation.errorMessage
         )
     }.stateIn(
         scope = viewModelScope,
@@ -238,8 +261,10 @@ class WorkoutViewModel @Inject constructor(
     }
 
     fun startWorkoutPlan(plan: WorkoutPlan) {
+        if (isSavingActiveSession.value) return
         setActiveSession(buildActiveWorkoutSession.fromPlan(plan, uiState.value.history), persistImmediately = true)
         personalRecords.value = emptyList()
+        errorMessage.value = null
         skipRestTimer()
     }
 
@@ -263,6 +288,7 @@ class WorkoutViewModel @Inject constructor(
     }
 
     fun addExerciseToActiveSession(exercise: Exercise) {
+        if (isSavingActiveSession.value) return
         updateActiveSession { session ->
             if (session.exercises.any { it.exercise.id == exercise.id }) return@updateActiveSession session
             val nextOrder = session.exercises.size
@@ -294,16 +320,19 @@ class WorkoutViewModel @Inject constructor(
     }
 
     fun removeExerciseFromActiveSession(activeExerciseId: String) {
+        if (isSavingActiveSession.value) return
         updateActiveSession { session ->
             session.copy(exercises = session.exercises.filterNot { it.id == activeExerciseId }).normalizeExerciseOrder()
         }
     }
 
     fun moveExerciseInActiveSession(activeExerciseId: String, direction: Int) {
+        if (isSavingActiveSession.value) return
         updateActiveSession { session ->
             val currentIndex = session.exercises.indexOfFirst { it.id == activeExerciseId }
+            if (currentIndex < 0) return@updateActiveSession session
             val targetIndex = (currentIndex + direction).coerceIn(0, session.exercises.lastIndex)
-            if (currentIndex < 0 || currentIndex == targetIndex) return@updateActiveSession session
+            if (currentIndex == targetIndex) return@updateActiveSession session
             val mutable = session.exercises.toMutableList()
             val item = mutable.removeAt(currentIndex)
             mutable.add(targetIndex, item)
@@ -312,6 +341,7 @@ class WorkoutViewModel @Inject constructor(
     }
 
     fun addSetToActiveExercise(activeExerciseId: String) {
+        if (isSavingActiveSession.value) return
         updateActiveExercise(activeExerciseId) { activeExercise ->
             val template = activeExercise.sets.lastOrNull()
             activeExercise.copy(
@@ -330,6 +360,7 @@ class WorkoutViewModel @Inject constructor(
     }
 
     fun deleteSetFromActiveExercise(activeExerciseId: String, setId: String) {
+        if (isSavingActiveSession.value) return
         updateActiveExercise(activeExerciseId) { activeExercise ->
             activeExercise.copy(
                 sets = activeExercise.sets
@@ -342,24 +373,32 @@ class WorkoutViewModel @Inject constructor(
     fun updateActiveSet(
         activeExerciseId: String,
         setId: String,
-        weightKg: Double? = null,
-        repetitions: Int? = null,
-        rpe: Int? = null,
-        rir: Int? = null,
-        setType: WorkoutSetType? = null
+        weightKg: Double?,
+        repetitions: Int?,
+        rpe: Int?,
+        rir: Int?,
+        setType: WorkoutSetType?
     ) {
+        if (isSavingActiveSession.value) return
         updateActiveExercise(activeExerciseId) { activeExercise ->
             activeExercise.copy(
                 sets = activeExercise.sets.map { set ->
                     if (set.id != setId) {
                         set
                     } else {
+                        val requiredValuesAreValid = weightKg?.let { it.isFinite() && it >= 0.0 } == true &&
+                            repetitions?.let { it > 0 } == true
+                        val effortValuesAreValid = (rpe == null || rpe in 1..10) &&
+                            (rir == null || rir in 0..10)
                         set.copy(
-                            weightKg = weightKg ?: set.weightKg,
-                            repetitions = repetitions ?: set.repetitions,
+                            weightKg = weightKg?.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0,
+                            repetitions = repetitions?.takeIf { it >= 0 } ?: 0,
                             rpe = rpe,
                             rir = rir,
-                            setType = setType ?: set.setType
+                            setType = setType ?: set.setType,
+                            completedAt = set.completedAt.takeIf {
+                                requiredValuesAreValid && effortValuesAreValid
+                            }
                         )
                     }
                 }
@@ -368,6 +407,7 @@ class WorkoutViewModel @Inject constructor(
     }
 
     fun toggleSetCompleted(activeExerciseId: String, setId: String) {
+        if (isSavingActiveSession.value) return
         var restSecondsToStart: Int? = null
         updateActiveExercise(activeExerciseId) { activeExercise ->
             activeExercise.copy(
@@ -375,8 +415,15 @@ class WorkoutViewModel @Inject constructor(
                     if (set.id != setId) {
                         set
                     } else if (set.completedAt == null) {
-                        restSecondsToStart = set.restSeconds
-                        set.copy(completedAt = System.currentTimeMillis())
+                        val validationMessage = set.completionValidationMessage()
+                        if (validationMessage == null) {
+                            errorMessage.value = null
+                            restSecondsToStart = set.restSeconds
+                            set.copy(completedAt = System.currentTimeMillis())
+                        } else {
+                            errorMessage.value = validationMessage
+                            set
+                        }
                     } else {
                         set.copy(completedAt = null)
                     }
@@ -387,61 +434,158 @@ class WorkoutViewModel @Inject constructor(
     }
 
     fun finishActiveWorkout(onFinished: () -> Unit = {}) {
-        val session = activeSession.value ?: return
+        if (!isSavingActiveSession.compareAndSet(expect = false, update = true)) return
+        val session = activeSession.value
+        if (session == null) {
+            isSavingActiveSession.value = false
+            return
+        }
         viewModelScope.launch {
-            val records = personalRecordDetector.detect(session, uiState.value.history)
-            val result = workoutRepository.saveWorkoutSession(session)
-            errorMessage.value = when (result) {
-                is AppResult.Success -> {
-                    setActiveSession(null)
-                    personalRecords.value = records
-                    skipRestTimer()
-                    onFinished()
-                    null
+            try {
+                val records = personalRecordDetector.detect(session, uiState.value.history)
+                val result = workoutRepository.saveWorkoutSession(session)
+                errorMessage.value = when (result) {
+                    is AppResult.Success -> {
+                        setActiveSession(null)
+                        personalRecords.value = records
+                        skipRestTimer()
+                        onFinished()
+                        null
+                    }
+                    is AppResult.Failure -> result.error.toMessage("Workout could not be saved.")
                 }
-                is AppResult.Failure -> result.error.toMessage("Workout could not be saved.")
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                errorMessage.value = "Workout could not be saved. Your active session is still available."
+            } finally {
+                isSavingActiveSession.value = false
             }
         }
     }
 
     fun discardActiveWorkout() {
+        if (isSavingActiveSession.value) return
         setActiveSession(null)
+        errorMessage.value = null
         skipRestTimer()
     }
 
     fun startRestTimer(seconds: Int = 90) {
-        timerJob?.cancel()
-        restTimer.value = RestTimerUiState(secondsRemaining = seconds, targetSeconds = seconds, isRunning = true)
-        timerJob = viewModelScope.launch {
-            while (restTimer.value.secondsRemaining > 0 && restTimer.value.isRunning) {
-                delay(1000)
-                restTimer.value = restTimer.value.copy(secondsRemaining = (restTimer.value.secondsRemaining - 1).coerceAtLeast(0))
-            }
-            if (restTimer.value.secondsRemaining == 0) {
-                restTimer.value = restTimer.value.copy(isRunning = false)
-            }
-        }
+        startRestTimer(seconds = seconds, targetSeconds = seconds)
     }
 
     fun adjustRestTimer(deltaSeconds: Int) {
         val current = restTimer.value
         val nextSeconds = (current.secondsRemaining + deltaSeconds).coerceAtLeast(0)
-        restTimer.value = current.copy(secondsRemaining = nextSeconds, targetSeconds = current.targetSeconds.coerceAtLeast(nextSeconds))
+        val next = current.copy(
+            secondsRemaining = nextSeconds,
+            targetSeconds = current.targetSeconds.coerceAtLeast(nextSeconds),
+            isRunning = current.isRunning && nextSeconds > 0
+        )
+        restTimer.value = next
+        timerJob?.cancel()
+        if (next.isRunning) {
+            val deadline = deadlineAfter(next.secondsRemaining)
+            persistRestTimer(next, deadline)
+            launchRestTimerTicker(deadline)
+        } else {
+            persistRestTimer(next, deadline = null)
+        }
     }
 
     fun pauseRestTimer() {
-        restTimer.value = restTimer.value.copy(isRunning = false)
         timerJob?.cancel()
+        val deadline = savedStateHandle.get<Long>(RestTimerDeadlineKey)
+        val remaining = deadline?.let(::secondsUntil) ?: restTimer.value.secondsRemaining
+        restTimer.value = restTimer.value.copy(secondsRemaining = remaining, isRunning = false)
+        persistRestTimer(restTimer.value, deadline = null)
     }
 
     fun resumeRestTimer() {
         val current = restTimer.value
-        if (current.secondsRemaining > 0) startRestTimer(current.secondsRemaining)
+        if (current.secondsRemaining > 0) {
+            startRestTimer(current.secondsRemaining, current.targetSeconds)
+        }
     }
 
     fun skipRestTimer() {
         timerJob?.cancel()
         restTimer.value = RestTimerUiState()
+        clearPersistedRestTimer()
+    }
+
+    private fun startRestTimer(seconds: Int, targetSeconds: Int) {
+        timerJob?.cancel()
+        if (seconds <= 0) {
+            skipRestTimer()
+            return
+        }
+        val state = RestTimerUiState(seconds, targetSeconds.coerceAtLeast(seconds), true)
+        val deadline = deadlineAfter(seconds)
+        restTimer.value = state
+        persistRestTimer(state, deadline)
+        launchRestTimerTicker(deadline)
+    }
+
+    private fun launchRestTimerTicker(deadline: Long) {
+        timerJob?.cancel()
+        timerJob = viewModelScope.launch {
+            while (restTimer.value.isRunning) {
+                val remaining = secondsUntil(deadline)
+                if (remaining <= 0) {
+                    restTimer.value = restTimer.value.copy(secondsRemaining = 0, isRunning = false)
+                    persistRestTimer(restTimer.value, deadline = null)
+                    break
+                }
+                restTimer.value = restTimer.value.copy(secondsRemaining = remaining)
+                delay(RestTimerTickMillis)
+            }
+        }
+    }
+
+    private fun restoreRestTimer(): RestTimerUiState {
+        val savedRemaining = savedStateHandle.get<Int>(RestTimerRemainingKey) ?: 0
+        val target = savedStateHandle.get<Int>(RestTimerTargetKey) ?: 90
+        val wasRunning = savedStateHandle.get<Boolean>(RestTimerRunningKey) ?: false
+        val deadline = savedStateHandle.get<Long>(RestTimerDeadlineKey)
+        val remaining = if (wasRunning && deadline != null) secondsUntil(deadline) else savedRemaining
+        return RestTimerUiState(
+            secondsRemaining = remaining.coerceAtLeast(0),
+            targetSeconds = target.coerceAtLeast(remaining),
+            isRunning = wasRunning && remaining > 0
+        )
+    }
+
+    private fun persistRestTimer(state: RestTimerUiState, deadline: Long?) {
+        savedStateHandle[RestTimerRemainingKey] = state.secondsRemaining
+        savedStateHandle[RestTimerTargetKey] = state.targetSeconds
+        savedStateHandle[RestTimerRunningKey] = state.isRunning
+        if (deadline == null) {
+            savedStateHandle.remove<Long>(RestTimerDeadlineKey)
+        } else {
+            savedStateHandle[RestTimerDeadlineKey] = deadline
+        }
+    }
+
+    private fun clearPersistedRestTimer() {
+        savedStateHandle.remove<Int>(RestTimerRemainingKey)
+        savedStateHandle.remove<Int>(RestTimerTargetKey)
+        savedStateHandle.remove<Boolean>(RestTimerRunningKey)
+        savedStateHandle.remove<Long>(RestTimerDeadlineKey)
+    }
+
+    private fun deadlineAfter(seconds: Int): Long {
+        return restTimerDeadline(
+            nowMillis = System.currentTimeMillis(),
+            seconds = seconds
+        )
+    }
+
+    private fun secondsUntil(deadline: Long): Int {
+        return remainingRestTimerSeconds(
+            deadlineMillis = deadline,
+            nowMillis = System.currentTimeMillis()
+        )
     }
 
     fun deleteWorkoutPlan(plan: WorkoutPlan) {
@@ -480,7 +624,9 @@ class WorkoutViewModel @Inject constructor(
             savedStateHandle.remove<String>(ActiveSessionKey)
         } else {
             sessionPersistenceJob = viewModelScope.launch {
-                if (!persistImmediately) delay(SessionPersistenceDebounceMillis)
+                if (!persistImmediately) {
+                    delay(SessionPersistenceDebounceMillis)
+                }
                 val json = withContext(Dispatchers.Default) { activeSessionAdapter.toJson(session) }
                 savedStateHandle[ActiveSessionKey] = json
             }
@@ -579,5 +725,31 @@ class WorkoutViewModel @Inject constructor(
     private companion object {
         const val ActiveSessionKey = "active_workout_session"
         const val SessionPersistenceDebounceMillis = 300L
+        const val RestTimerRemainingKey = "rest_timer_remaining"
+        const val RestTimerTargetKey = "rest_timer_target"
+        const val RestTimerRunningKey = "rest_timer_running"
+        const val RestTimerDeadlineKey = "rest_timer_deadline"
+        const val RestTimerTickMillis = 250L
     }
+}
+
+internal fun ActiveWorkoutSet.completionValidationMessage(): String? {
+    return when {
+        !weightKg.isFinite() || weightKg < 0.0 -> "Enter a valid, non-negative weight before completing the set."
+        repetitions < 1 -> "Enter at least one repetition before completing the set."
+        rpe != null && rpe !in 1..10 -> "RPE must be between 1 and 10."
+        rir != null && rir !in 0..10 -> "RIR must be between 0 and 10."
+        else -> null
+    }
+}
+
+internal fun restTimerDeadline(nowMillis: Long, seconds: Int): Long {
+    return nowMillis + seconds.coerceAtLeast(0).toLong() * 1_000L
+}
+
+internal fun remainingRestTimerSeconds(deadlineMillis: Long, nowMillis: Long): Int {
+    val remainingMillis = (deadlineMillis - nowMillis).coerceAtLeast(0L)
+    return ((remainingMillis + 999L) / 1_000L)
+        .coerceAtMost(Int.MAX_VALUE.toLong())
+        .toInt()
 }

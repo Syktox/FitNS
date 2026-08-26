@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.raysix.fitns.core.input.toUserDecimalOrNull
 import com.raysix.fitns.core.model.AppError
 import com.raysix.fitns.core.model.AppResult
 import com.raysix.fitns.domain.model.DataQuality
@@ -180,17 +181,17 @@ class MealAnalysisViewModel @Inject constructor(
         state.value = snapshot.copy(loading = true, errorMessage = null, phase = MealAnalysisPhase.Saving)
         viewModelScope.launch {
             val entries = snapshot.items.mapNotNull { item ->
-                val grams = item.grams.toDoubleOrNull()?.takeIf { it > 0.0 } ?: return@mapNotNull null
+                val grams = item.grams.toUserDecimalOrNull()?.takeIf { it > 0.0 } ?: return@mapNotNull null
                 FoodLogEntry(
                     name = item.name.ifBlank { "Analyzed meal item" },
                     brand = null,
                     mealType = snapshot.mealType,
                     grams = grams,
                     nutrition = NutritionFacts(
-                        caloriesKcal = item.calories.toDoubleOrNull() ?: 0.0,
-                        proteinGrams = item.protein.toDoubleOrNull() ?: 0.0,
-                        carbohydratesGrams = item.carbs.toDoubleOrNull() ?: 0.0,
-                        fatGrams = item.fat.toDoubleOrNull() ?: 0.0
+                        caloriesKcal = item.calories.toUserDecimalOrNull() ?: 0.0,
+                        proteinGrams = item.protein.toUserDecimalOrNull() ?: 0.0,
+                        carbohydratesGrams = item.carbs.toUserDecimalOrNull() ?: 0.0,
+                        fatGrams = item.fat.toUserDecimalOrNull() ?: 0.0
                     ),
                     dataQuality = DataQuality.Estimated,
                     notes = buildString {

@@ -160,6 +160,16 @@ class DataStoreSettingsRepository @Inject constructor(
         tokenStore.clear()
     }
 
+    override suspend fun clearAllLocalSettings() {
+        // Remove the credential first. If clearing DataStore then fails, the
+        // deletion flow reports a failure and can safely be retried without
+        // leaving a usable bearer token behind.
+        tokenStore.clear()
+        context.fitNsSettingsDataStore.edit { preferences ->
+            preferences.clear()
+        }
+    }
+
     private companion object {
         val N8nBaseUrlKey = stringPreferencesKey("n8n_base_url")
         val N8nSyncEnabledKey = booleanPreferencesKey("n8n_sync_enabled")
