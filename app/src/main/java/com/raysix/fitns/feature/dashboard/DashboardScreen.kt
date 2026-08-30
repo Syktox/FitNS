@@ -1,48 +1,59 @@
 package com.raysix.fitns.feature.dashboard
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.raysix.fitns.R
+import com.raysix.fitns.core.design.AccentAmber
 import com.raysix.fitns.core.design.AdaptiveTwoColumn
 import com.raysix.fitns.core.design.BrandGradient
+import com.raysix.fitns.core.design.BrandGradientViolet
 import com.raysix.fitns.core.design.FitNsDimens
 import com.raysix.fitns.core.design.GradientHeroCard
 import com.raysix.fitns.core.design.LabeledProgress
 import com.raysix.fitns.core.design.MetricProgressBar
-import com.raysix.fitns.core.design.MetricRing
 import com.raysix.fitns.core.design.ModernCard
+import com.raysix.fitns.core.design.OceanBackdrop
+import com.raysix.fitns.core.design.PillButton
 import com.raysix.fitns.core.design.ProgressRing
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.SectionTitle
 import com.raysix.fitns.core.design.StatCard
 import com.raysix.fitns.core.design.TagChip
+import com.raysix.fitns.core.design.WhaleTailMark
+import com.raysix.fitns.core.design.isCompactHeight
 import com.raysix.fitns.core.design.isWideScreen
-import com.raysix.fitns.core.design.PillButton
 import com.raysix.fitns.domain.model.DailyNutritionDashboard
 import com.raysix.fitns.domain.model.NutrientAggregate
 import kotlin.math.roundToInt
@@ -59,52 +70,61 @@ fun DashboardScreen(
     onAddFood: () -> Unit,
     onStartWorkout: () -> Unit,
     onAddWater: (Double) -> Unit,
-    onRemoveWater: (Double) -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val wide = isWideScreen()
-    var showDetails by remember { mutableStateOf(false) }
-    AdaptiveTwoColumn(
-        header = {
-            ScreenHeader(
-                title = "Today",
-                subtitle = "Your nutrition, movement, and next best action",
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Open settings")
+    val compactHeight = isCompactHeight()
+    var showDetails by rememberSaveable { mutableStateOf(false) }
+
+    OceanBackdrop {
+        AdaptiveTwoColumn(
+            header = {
+                ScreenHeader(
+                    title = "Today",
+                    subtitle = if (compactHeight) "Your daily current" else "Nutrition, movement, and the next useful step",
+                    actions = {
+                        Surface(
+                            onClick = onOpenSettings,
+                            modifier = Modifier.size(48.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ) {
+                            Icon(
+                                Icons.Outlined.Settings,
+                                contentDescription = "Open settings",
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
                     }
-                }
-            )
-        },
-        main = {
-            CalorieHeroCard(
-                dashboard = dashboard,
-                onAddFood = onAddFood,
-                onStartWorkout = onStartWorkout
-            )
-            MacroRingsCard(dashboard = dashboard)
-            WaterCard(dashboard = dashboard, message = message, onAddWater = onAddWater, onRemoveWater = onRemoveWater)
-            WorkoutSummaryCard(workoutSummary = workoutSummary, onStartWorkout = onStartWorkout)
-            if (mealBreakdown.isNotEmpty() && (wide || showDetails)) {
-                MealBreakdownCard(meals = mealBreakdown)
-            }
-            if (!wide) {
-                PillButton(
-                    text = if (showDetails) "Hide insights" else "Show insights",
-                    modifier = Modifier.fillMaxWidth(),
-                    filled = false,
-                    onClick = { showDetails = !showDetails }
                 )
+            },
+            main = {
+                CalorieHeroCard(dashboard, onAddFood, onStartWorkout)
+                MacroGoalsCard(dashboard)
+                WaterCard(dashboard, message, onAddWater)
+                WorkoutSummaryCard(workoutSummary, onStartWorkout)
+                if (mealBreakdown.isNotEmpty() && (wide || showDetails)) {
+                    MealBreakdownCard(mealBreakdown)
+                }
+                if (!wide) {
+                    PillButton(
+                        text = if (showDetails) "Hide insights" else "Show insights",
+                        modifier = Modifier.fillMaxWidth(),
+                        filled = false,
+                        onClick = { showDetails = !showDetails }
+                    )
+                }
+            },
+            side = {
+                if (wide || showDetails) {
+                    DailyCoachCard(coach)
+                    ReadinessCard(readiness, onStartWorkout)
+                    MicronutrientCard(micronutrients)
+                }
             }
-        },
-        side = {
-            if (wide || showDetails) {
-                DailyCoachCard(coach = coach)
-                ReadinessCard(readiness = readiness, onStartWorkout = onStartWorkout)
-                MicronutrientCard(micronutrients = micronutrients)
-            }
-        }
-    )
+        )
+    }
 }
 
 @Composable
@@ -116,56 +136,54 @@ private fun CalorieHeroCard(
     val percent = if (dashboard.goal.caloriesKcal > 0) {
         (dashboard.total.caloriesKcal / dashboard.goal.caloriesKcal).toFloat()
     } else 0f
-    val track = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.28f)
-    val onPrimary = MaterialTheme.colorScheme.onPrimary
+    val onHero = MaterialTheme.colorScheme.onPrimary
+    val track = onHero.copy(alpha = 0.24f)
 
     GradientHeroCard(brush = BrandGradient) {
-        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(
-                    Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
+                WhaleTailMark(Modifier.size(28.dp), tint = onHero.copy(alpha = 0.9f))
+                Text(
+                    "TODAY'S CURRENT",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = onHero.copy(alpha = 0.82f),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "TODAY",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = onPrimary.copy(alpha = 0.85f)
-                    )
-                    Text(
-                        "Calories",
+                        "Keep your rhythm",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        color = onPrimary
+                        color = onHero
                     )
                     Text(
                         "${dashboard.total.caloriesKcal.roundToInt()} of ${dashboard.goal.caloriesKcal.roundToInt()} kcal",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = onPrimary.copy(alpha = 0.9f),
+                        color = onHero.copy(alpha = 0.9f),
                         fontWeight = FontWeight.Medium
                     )
                 }
                 ProgressRing(
                     progress = percent,
-                    modifier = Modifier.size(104.dp),
-                    stroke = 12.dp,
-                    color = onPrimary,
+                    modifier = Modifier.size(96.dp),
+                    stroke = 11.dp,
+                    color = onHero,
                     trackColor = track
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            "${dashboard.remainingCalories.roundToInt()}",
+                            dashboard.remainingCalories.roundToInt().toString(),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            color = onPrimary
+                            color = onHero
                         )
                         Text(
-                            "left",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = onPrimary.copy(alpha = 0.85f)
+                            "remaining",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = onHero.copy(alpha = 0.82f)
                         )
                     }
                 }
@@ -173,116 +191,128 @@ private fun CalorieHeroCard(
             LinearProgressIndicator(
                 progress = { percent.coerceIn(0f, 1f) },
                 modifier = Modifier.fillMaxWidth(),
-                color = onPrimary,
+                color = onHero,
                 trackColor = track,
                 strokeCap = StrokeCap.Round,
                 gapSize = 6.dp
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                HeroPillButton(
-                    text = "Add Food",
-                    filled = true,
-                    modifier = Modifier.weight(1f),
-                    onClick = onAddFood
-                )
-                HeroPillButton(
-                    text = "Workout",
-                    filled = false,
-                    modifier = Modifier.weight(1f),
-                    onClick = onStartWorkout
-                )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                HeroAction("Add food", true, Modifier.weight(1f), onAddFood)
+                HeroAction("Start workout", false, Modifier.weight(1f), onStartWorkout)
             }
         }
     }
 }
 
 @Composable
-private fun HeroPillButton(
+private fun HeroAction(
     text: String,
     filled: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val onHero = MaterialTheme.colorScheme.onPrimary
     Surface(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.heightIn(min = 48.dp),
         shape = RoundedCornerShape(999.dp),
-        color = if (filled) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            androidx.compose.ui.graphics.Color.Transparent
-        },
-        contentColor = if (filled) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onPrimary
-        },
-        border = if (filled) {
-            null
-        } else {
-            androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f))
-        }
+        color = if (filled) onHero else Color.Transparent,
+        contentColor = if (filled) MaterialTheme.colorScheme.primary else onHero,
+        border = if (filled) null else BorderStroke(1.5.dp, onHero.copy(alpha = 0.86f))
     ) {
         Text(
-            text,
+            text = text,
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 13.dp)
         )
     }
 }
 
+private data class MacroGoalItem(
+    val label: String,
+    val value: Double,
+    val target: Double,
+    val color: Color
+)
+
 @Composable
-private fun MacroRingsCard(dashboard: DailyNutritionDashboard) {
+private fun MacroGoalsCard(dashboard: DailyNutritionDashboard) {
+    val goals = listOf(
+        MacroGoalItem("Protein", dashboard.total.proteinGrams, dashboard.goal.proteinGrams, MaterialTheme.colorScheme.tertiary),
+        MacroGoalItem("Carbs", dashboard.total.carbohydratesGrams, dashboard.goal.carbohydrateGrams, MaterialTheme.colorScheme.primary),
+        MacroGoalItem("Fat", dashboard.total.fatGrams, dashboard.goal.fatGrams, AccentAmber),
+        MacroGoalItem("Fiber", dashboard.total.fiberGrams, dashboard.goal.fiberGrams, MaterialTheme.colorScheme.secondary)
+    )
+
     ModernCard {
         Column(verticalArrangement = Arrangement.spacedBy(FitNsDimens.SectionSpacing)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                SectionTitle("Macros")
-                TagChip(text = "Daily goals", accent = true)
-            }
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                MacroRing("Protein", dashboard.total.proteinGrams, dashboard.goal.proteinGrams, "g", Modifier.weight(1f))
-                MacroRing("Carbs", dashboard.total.carbohydratesGrams, dashboard.goal.carbohydrateGrams, "g", Modifier.weight(1f))
-                MacroRing("Fat", dashboard.total.fatGrams, dashboard.goal.fatGrams, "g", Modifier.weight(1f))
-                MacroRing("Fiber", dashboard.total.fiberGrams, dashboard.goal.fiberGrams, "g", Modifier.weight(1f))
+                SectionTitle("Daily macros")
+                TagChip("Live", accent = true)
+            }
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                if (maxWidth < 420.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        goals.chunked(2).forEach { rowItems ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                rowItems.forEach { goal ->
+                                    MacroGoalTile(goal, Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        goals.forEach { goal ->
+                            MacroGoalTile(goal, Modifier.weight(1f))
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MacroRing(
-    label: String,
-    value: Double,
-    target: Double,
-    unit: String,
-    modifier: Modifier = Modifier
-) {
-    val percent = if (target > 0) (value / target).toFloat() else 0f
-    val color = if (percent >= 1f) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.tertiary
-    }
-    MetricRing(
-        label = label,
-        value = "${value.roundToInt()}/$unit",
-        percent = percent,
+private fun MacroGoalTile(goal: MacroGoalItem, modifier: Modifier = Modifier) {
+    val percent = if (goal.target > 0) (goal.value / goal.target).toFloat() else 0f
+    Surface(
         modifier = modifier,
-        color = color
-    )
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(
+                goal.label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "${goal.value.roundToInt()} / ${goal.target.roundToInt()} g",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            MetricProgressBar(percent, Modifier.fillMaxWidth(), goal.color)
+        }
+    }
 }
 
 @Composable
 private fun WaterCard(
     dashboard: DailyNutritionDashboard,
     message: String?,
-    onAddWater: (Double) -> Unit,
-    onRemoveWater: (Double) -> Unit
+    onAddWater: (Double) -> Unit
 ) {
     val percent = if (dashboard.goal.waterMilliliters > 0) {
         (dashboard.waterMilliliters / dashboard.goal.waterMilliliters).toFloat()
@@ -291,44 +321,35 @@ private fun WaterCard(
     ModernCard {
         Column(verticalArrangement = Arrangement.spacedBy(FitNsDimens.SectionSpacing)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(
-                    Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Hydration", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
                         "${dashboard.waterMilliliters.roundToInt()} of ${dashboard.goal.waterMilliliters.roundToInt()} ml",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Medium
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        HeroPillButtonSmall("−250", { onRemoveWater(250.0) }, Modifier)
-                        HeroPillButtonSmall("+250", { onAddWater(250.0) }, Modifier)
-                        HeroPillButtonSmall("+500", { onAddWater(500.0) }, Modifier)
-                    }
                 }
                 ProgressRing(
                     progress = percent,
-                    modifier = Modifier.size(88.dp),
-                    stroke = 11.dp,
+                    modifier = Modifier.size(72.dp),
+                    stroke = 9.dp,
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "${(percent * 100).roundToInt()}%",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    Text(
+                        "${(percent * 100).roundToInt()}%",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
-            MetricProgressBar(
-                progress = percent,
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary
-            )
+            MetricProgressBar(percent, Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                WaterAction("+250", Modifier.weight(1f)) { onAddWater(250.0) }
+                WaterAction("+500", Modifier.weight(1f)) { onAddWater(500.0) }
+            }
             message?.let {
                 Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
             }
@@ -337,26 +358,29 @@ private fun WaterCard(
 }
 
 @Composable
-private fun HeroPillButtonSmall(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun WaterAction(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(999.dp),
+        modifier = modifier.heightIn(min = 48.dp),
+        shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     ) {
         Text(
             text,
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 13.dp)
         )
     }
 }
 
 @Composable
 private fun ReadinessCard(readiness: DashboardReadiness, onStartWorkout: () -> Unit) {
-    SectionCard(title = "Readiness", trailing = { TagChip(text = readiness.status, accent = true) }) {
+    SectionCard(title = "Readiness", trailing = { TagChip(readiness.status, accent = true) }) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(readiness.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(readiness.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -368,33 +392,23 @@ private fun ReadinessCard(readiness: DashboardReadiness, onStartWorkout: () -> U
                     Modifier.weight(1f)
                 )
             }
-            Surface(
-                onClick = onStartWorkout,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(999.dp),
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Text(
-                    "Open Workout",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 12.dp)
-                )
-            }
+            PillButton("Open workout", Modifier.fillMaxWidth(), onStartWorkout)
         }
     }
 }
 
 @Composable
-private fun WorkoutSummaryCard(workoutSummary: DashboardWorkoutSummary, onStartWorkout: () -> Unit) {
+private fun WorkoutSummaryCard(
+    workoutSummary: DashboardWorkoutSummary,
+    onStartWorkout: () -> Unit
+) {
     SectionCard(
-        title = "Workout Today",
-        subtitle = workoutSummary.latestExerciseName?.let { "Latest: $it" } ?: "No workout logged yet.",
+        title = "Today's training",
+        subtitle = workoutSummary.latestExerciseName?.let { "Latest: $it" } ?: "No workout logged yet",
         trailing = {
             Text(
-                "${workoutSummary.workoutCount} workouts",
+                "${workoutSummary.workoutCount} total",
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold
             )
@@ -405,21 +419,7 @@ private fun WorkoutSummaryCard(workoutSummary: DashboardWorkoutSummary, onStartW
                 StatCard("Sets", workoutSummary.setCount.toString(), Modifier.weight(1f))
                 StatCard("Volume", "${workoutSummary.volumeKg.roundToInt()} kg", Modifier.weight(1f))
             }
-            Surface(
-                onClick = onStartWorkout,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(999.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            ) {
-                Text(
-                    "Start Workout",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 12.dp)
-                )
-            }
+            PillButton("Start workout", Modifier.fillMaxWidth(), onStartWorkout, filled = false)
         }
     }
 }
@@ -431,7 +431,7 @@ private fun MicronutrientCard(micronutrients: List<NutrientAggregate>) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 SectionTitle("Micronutrients")
                 Text(
-                    "Log foods with micronutrient data to see vitamin and mineral coverage against your targets.",
+                    "Log foods with vitamin and mineral data to see coverage against your targets.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -440,21 +440,15 @@ private fun MicronutrientCard(micronutrients: List<NutrientAggregate>) {
     }
     SectionCard(
         title = "Micronutrients",
-        trailing = {
-            TagChip(text = "${micronutrients.count { it.percent >= 1f }}/${micronutrients.size} met")
-        }
+        trailing = { TagChip("${micronutrients.count { it.percent >= 1f }}/${micronutrients.size} met") }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             micronutrients.take(6).forEach { aggregate ->
                 LabeledProgress(
                     label = aggregate.label,
-                    current = aggregate.consumed?.roundToInt().let { "$it / ${aggregate.target?.roundToInt()} ${aggregate.unit}" },
+                    current = "${aggregate.consumed?.roundToInt() ?: 0} / ${aggregate.target?.roundToInt() ?: 0} ${aggregate.unit}",
                     progress = aggregate.percent,
-                    barColor = if (aggregate.percent >= 1f) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.tertiary
-                    }
+                    barColor = if (aggregate.percent >= 1f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
                 )
             }
             if (micronutrients.size > 6) {
@@ -469,46 +463,52 @@ private fun MicronutrientCard(micronutrients: List<NutrientAggregate>) {
 
 @Composable
 private fun DailyCoachCard(coach: DashboardCoach) {
-    GradientHeroCard(brush = BrandGradient) {
+    val onHero = MaterialTheme.colorScheme.onPrimary
+    GradientHeroCard(brush = BrandGradientViolet) {
         Column(verticalArrangement = Arrangement.spacedBy(FitNsDimens.SectionSpacing)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(
-                    Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
+                WhaleTailMark(Modifier.size(25.dp), tint = onHero.copy(alpha = 0.9f))
+                Text(
+                    "BLUE WHALE COACH",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = onHero.copy(alpha = 0.82f),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+                Text(
+                    "${coach.score}/100",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = onHero,
+                    modifier = Modifier.weight(1f).padding(start = 8.dp),
+                    textAlign = TextAlign.End
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(
                         coach.title,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = onHero
                     )
                     Text(
                         coach.summary,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                        color = onHero.copy(alpha = 0.9f)
                     )
                 }
-                ProgressRing(
-                    progress = (coach.score / 100f).coerceIn(0f, 1f),
-                    modifier = Modifier.size(88.dp),
-                    stroke = 10.dp,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.28f)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "${coach.score}",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                }
+                Image(
+                    painter = painterResource(R.drawable.whale_coach),
+                    contentDescription = null,
+                    modifier = Modifier.padding(start = 8.dp).size(82.dp),
+                    contentScale = ContentScale.Fit
+                )
             }
             Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f),
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                shape = RoundedCornerShape(15.dp),
+                color = onHero.copy(alpha = 0.15f),
+                contentColor = onHero
             ) {
                 Text(
                     coach.focus,
@@ -523,13 +523,28 @@ private fun DailyCoachCard(coach: DashboardCoach) {
 
 @Composable
 private fun MealBreakdownCard(meals: List<MealBreakdown>) {
-    SectionCard(title = "Meal Balance") {
+    SectionCard(title = "Meal balance") {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             meals.forEach { meal ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(meal.label, fontWeight = FontWeight.SemiBold)
-                        Text("${meal.entryCount} items · Protein ${meal.proteinGrams.roundToInt()} g", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            meal.label,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            "${meal.entryCount} items · Protein ${meal.proteinGrams.roundToInt()} g",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                     Text(
                         "${meal.caloriesKcal.roundToInt()} kcal",

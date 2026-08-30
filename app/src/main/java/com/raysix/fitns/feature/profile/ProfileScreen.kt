@@ -1,10 +1,14 @@
 package com.raysix.fitns.feature.profile
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,7 +32,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.MonitorWeight
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.WaterDrop
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.raysix.fitns.core.design.AdaptiveTwoColumn
 import com.raysix.fitns.core.design.ActivityLevelSelector
 import com.raysix.fitns.core.design.BiologicalSexDropdown
@@ -88,8 +97,8 @@ fun ProfileScreen(
     AdaptiveTwoColumn(
         header = {
             ScreenHeader(
-                title = "Profile",
-                subtitle = "Set goals that drive nutrition targets and progress tracking.",
+                title = "Your course",
+                subtitle = "Set the body, routine, and fuel targets that guide FitNS.",
                 actions = {
                     TextButton(onClick = onBack) { Text("Back") }
                     IconButton(onClick = onOpenSettings) {
@@ -102,21 +111,29 @@ fun ProfileScreen(
             )
         },
         main = {
-            SectionCard(title = "Profile") {
+            SectionCard(title = "Body & routine", subtitle = "The baseline behind your estimates.") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumericField(age, { age = it }, "Age", Modifier.weight(1f))
-                        NumericField(trainingDays, { trainingDays = it }, "Training days", Modifier.weight(1f))
-                    }
+                    AdaptiveFieldPair(
+                        first = {
+                            NumericField(age, { age = it }, "Age")
+                        },
+                        second = {
+                            NumericField(trainingDays, { trainingDays = it }, "Training days")
+                        }
+                    )
                     BiologicalSexDropdown(
                         value = physiology,
                         onValueChange = { physiology = it },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumericField(height, { height = it }, "Height cm", Modifier.weight(1f))
-                        NumericField(weight, { weight = it }, "Weight kg", Modifier.weight(1f))
-                    }
+                    AdaptiveFieldPair(
+                        first = {
+                            NumericField(height, { height = it }, "Height cm")
+                        },
+                        second = {
+                            NumericField(weight, { weight = it }, "Weight kg")
+                        }
+                    )
                     NumericField(targetWeight, { targetWeight = it }, "Target weight kg")
                     ActivityLevelSelector(
                         selected = activity,
@@ -129,8 +146,8 @@ fun ProfileScreen(
                 }
             }
             SectionCard(
-                title = "Nutrition Goals",
-                subtitle = "Estimates use body weight, activity, and goal. Adjust them after observing progress.",
+                title = "Fuel targets",
+                subtitle = "Estimate a starting point, then steer with your real-world trend.",
                 trailing = {
                     Surface(
                         onClick = {
@@ -151,7 +168,7 @@ fun ProfileScreen(
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     ) {
                         Text(
-                            "Estimate",
+                            "Recalculate",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
@@ -161,22 +178,30 @@ fun ProfileScreen(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     NumericField(calories, { calories = it }, "Calories kcal")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumericField(protein, { protein = it }, "Protein g", Modifier.weight(1f))
-                        NumericField(carbs, { carbs = it }, "Carbs g", Modifier.weight(1f))
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumericField(fat, { fat = it }, "Fat g", Modifier.weight(1f))
-                        NumericField(fiber, { fiber = it }, "Fiber g", Modifier.weight(1f))
-                    }
+                    AdaptiveFieldPair(
+                        first = {
+                            NumericField(protein, { protein = it }, "Protein g")
+                        },
+                        second = {
+                            NumericField(carbs, { carbs = it }, "Carbs g")
+                        }
+                    )
+                    AdaptiveFieldPair(
+                        first = {
+                            NumericField(fat, { fat = it }, "Fat g")
+                        },
+                        second = {
+                            NumericField(fiber, { fiber = it }, "Fiber g")
+                        }
+                    )
                     NumericField(water, { water = it }, "Water ml")
                 }
             }
             uiState.statusMessage?.let {
-                Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+                ProfileStatus(it, error = false)
             }
             uiState.errorMessage?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
+                ProfileStatus(it, error = true)
             }
             Surface(
                 onClick = {
@@ -207,7 +232,7 @@ fun ProfileScreen(
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
                 Text(
-                    "Save Profile",
+                    "Save my course",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
@@ -216,11 +241,16 @@ fun ProfileScreen(
             }
         },
         side = {
-            SectionCard(title = "Quick Access") {
+            ProfileCourseCard(
+                goal = goalName.ifBlank { uiState.profile.goal.ifBlank { "Build your baseline" } },
+                trainingDays = trainingDays.toIntOrNull() ?: uiState.profile.trainingDaysPerWeek,
+                targetWeight = targetWeight.toUserDecimalOrNull() ?: uiState.profile.targetWeightKg
+            )
+            SectionCard(title = "Quick dive", subtitle = "Jump straight to the signal you need.") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    QuickLink(text = "Weight Tracking", onClick = onOpenWeight)
-                    QuickLink(text = "Coaching Tips", onClick = onOpenTips)
-                    QuickLink(text = "Settings", onClick = onOpenSettings)
+                    QuickLink(Icons.Outlined.MonitorWeight, "Weight tracking", onOpenWeight)
+                    QuickLink(Icons.Outlined.Lightbulb, "Coaching current", onOpenTips)
+                    QuickLink(Icons.Outlined.Settings, "Settings", onOpenSettings)
                 }
             }
         }
@@ -270,23 +300,28 @@ fun NutritionGoalsSettingsScreen(
     AdaptiveTwoColumn(
         header = {
             ScreenHeader(
-                title = "Nutrition Goals",
-                subtitle = "Fine-tune the targets calculated during onboarding.",
+                title = "Fuel course",
+                subtitle = "Fine-tune energy, macros, fiber, and hydration.",
                 actions = { TextButton(onClick = onBack) { Text("Back") } }
             )
         },
         main = {
-            SectionCard(title = "Energy and macros") {
+            SectionCard(title = "Energy & macros", subtitle = "Daily targets for the work ahead.") {
                 NumericField(calories, { calories = it }, "Calories kcal")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumericField(protein, { protein = it }, "Protein g", Modifier.weight(1f))
-                    NumericField(carbs, { carbs = it }, "Carbs g", Modifier.weight(1f))
-                }
+                AdaptiveFieldPair(
+                    first = {
+                        NumericField(protein, { protein = it }, "Protein g")
+                    },
+                    second = {
+                        NumericField(carbs, { carbs = it }, "Carbs g")
+                    }
+                )
                 NumericField(fat, { fat = it }, "Fat g")
             }
         },
         side = {
-            SectionCard(title = "Fiber and hydration") {
+            NutritionCourseCard(editedGoal)
+            SectionCard(title = "Fiber & hydration", subtitle = "Support recovery and a steady daily rhythm.") {
                 NumericField(fiber, { fiber = it }, "Fiber g")
                 NumericField(water, { water = it }, "Water ml")
             }
@@ -305,7 +340,7 @@ fun NutritionGoalsSettingsScreen(
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
                 Text(
-                    "Save Nutrition Goals",
+                    "Save fuel course",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
@@ -324,7 +359,7 @@ fun NutritionGoalsSettingsScreen(
 }
 
 @Composable
-private fun QuickLink(text: String, onClick: () -> Unit) {
+private fun QuickLink(icon: ImageVector, text: String, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -334,11 +369,112 @@ private fun QuickLink(text: String, onClick: () -> Unit) {
     ) {
         Row(
             Modifier.padding(horizontal = 18.dp, vertical = 13.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+            Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+@Composable
+private fun ProfileCourseCard(goal: String, trainingDays: Int, targetWeight: Double?) {
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(50.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.Explore, contentDescription = null, modifier = Modifier.size(26.dp))
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("Current heading", style = MaterialTheme.typography.labelMedium)
+                    Text(goal, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CourseMetric("Training", if (trainingDays > 0) "$trainingDays days/wk" else "Not set", Modifier.weight(1f))
+                CourseMetric("Target", targetWeight?.let { "${it.formatPlain()} kg" } ?: "Not set", Modifier.weight(1f))
+            }
+            Text(
+                "Like a whale holding a long course, favor repeatable habits over sharp turns.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CourseMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+        contentColor = MaterialTheme.colorScheme.onSurface
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun NutritionCourseCard(goal: NutritionGoal) {
+    SectionCard(title = "Daily current", subtitle = "Your targets at a glance.", accent = true) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            CourseMetric("Energy", "${goal.caloriesKcal.toInt()} kcal", Modifier.weight(1f))
+            CourseMetric("Protein", "${goal.proteinGrams.toInt()} g", Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.WaterDrop, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Text(
+                "${goal.waterMilliliters.toInt()} ml hydration target",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfileStatus(message: String, error: Boolean) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
+        contentColor = if (error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(message, fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp))
+    }
+}
+
+@Composable
+private fun AdaptiveFieldPair(first: @Composable () -> Unit, second: @Composable () -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth < 380.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                first()
+                second()
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f)) { first() }
+                Box(Modifier.weight(1f)) { second() }
+            }
         }
     }
 }

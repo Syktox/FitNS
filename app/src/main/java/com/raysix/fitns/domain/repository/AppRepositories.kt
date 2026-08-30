@@ -47,6 +47,7 @@ interface NutritionRepository {
     fun observeCustomFoods(): Flow<List<CustomFood>>
     fun observeSavedMeals(): Flow<List<SavedMeal>>
     suspend fun addFood(entry: FoodLogEntry): AppResult<Unit>
+    suspend fun addFoods(entries: List<FoodLogEntry>): AppResult<Unit>
     suspend fun updateFood(entry: FoodLogEntry): AppResult<Unit>
     suspend fun saveFavorite(entry: FoodLogEntry): AppResult<Unit>
     suspend fun deleteFavorite(favorite: FoodFavoritePreset): AppResult<Unit>

@@ -48,6 +48,9 @@ interface WorkoutDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertExercise(exercise: ExerciseEntity)
 
+    @Query("UPDATE exercises SET deletedAt = :deletedAt, updatedAt = :deletedAt, syncStatus = 'PendingSync' WHERE id = :exerciseId")
+    suspend fun softDeleteExercise(exerciseId: String, deletedAt: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertWorkoutSet(set: WorkoutSetEntity)
 

@@ -140,7 +140,7 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             val result = nutritionRepository.addWater(milliliters)
             message.value = when (result) {
-                is AppResult.Success -> "Water logged."
+                is AppResult.Success -> null
                 is AppResult.Failure -> "Water could not be logged."
             }
         }

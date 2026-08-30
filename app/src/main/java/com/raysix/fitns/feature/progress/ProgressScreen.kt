@@ -2,14 +2,22 @@ package com.raysix.fitns.feature.progress
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoGraph
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Waves
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -37,7 +45,6 @@ import com.raysix.fitns.core.design.EmptyStateCard
 import com.raysix.fitns.core.design.GradientHeroCard
 import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
-import com.raysix.fitns.core.design.SectionTitle
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -46,8 +53,8 @@ fun ProgressScreen(uiState: ProgressUiState, onBack: () -> Unit = {}) {
     AdaptiveTwoColumn(
         header = {
             ScreenHeader(
-                title = "Progress",
-                subtitle = "Trends across nutrition, weight, and workouts.",
+                title = "Deep progress",
+                subtitle = "See the currents connecting nutrition, weight, and training.",
                 actions = { TextButton(onClick = onBack) { Text("Back") } }
             )
         },
@@ -70,6 +77,7 @@ fun ProgressScreen(uiState: ProgressUiState, onBack: () -> Unit = {}) {
             MuscleGroupVolumeCard(uiState.muscleGroupVolume)
         },
         side = {
+            ProgressCompassCard(uiState)
             TrendCard(
                 title = "Body Weight",
                 valueLabel = "kg",
@@ -92,16 +100,74 @@ private fun ProgressSummaryCard(summary: ProgressSummary) {
     GradientHeroCard(brush = BrandGradient) {
         val onPrimary = MaterialTheme.colorScheme.onPrimary
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(
-                "Snapshot",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = onPrimary.copy(alpha = 0.85f)
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                HeroMetric("Avg Calories", summary.averageCalories?.roundToInt()?.toString() ?: "-", onPrimary, Modifier.weight(1f))
-                HeroMetric("Weight", summary.latestWeightKg?.let { "${it.formatOne()} kg" } ?: "-", onPrimary, Modifier.weight(1f))
-                HeroMetric("7d Volume", "${summary.weeklyVolumeKg.roundToInt()} kg", onPrimary, Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = RoundedCornerShape(15.dp),
+                    color = onPrimary.copy(alpha = 0.16f),
+                    contentColor = onPrimary
+                ) {
+                    Icon(Icons.Outlined.Waves, contentDescription = null, modifier = Modifier.padding(9.dp).size(23.dp))
+                }
+                Column {
+                    Text("Your current", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = onPrimary)
+                    Text("A compact view of the signals moving together", style = MaterialTheme.typography.bodySmall, color = onPrimary.copy(alpha = 0.8f))
+                }
+            }
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                if (maxWidth < 390.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        HeroMetric("Daily energy", summary.averageCalories?.roundToInt()?.let { "$it kcal" } ?: "—", onPrimary)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            HeroMetric("Latest weight", summary.latestWeightKg?.let { "${it.formatOne()} kg" } ?: "—", onPrimary, Modifier.weight(1f))
+                            HeroMetric("7-day volume", "${summary.weeklyVolumeKg.roundToInt()} kg", onPrimary, Modifier.weight(1f))
+                        }
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        HeroMetric("Daily energy", summary.averageCalories?.roundToInt()?.let { "$it kcal" } ?: "—", onPrimary, Modifier.weight(1f))
+                        HeroMetric("Latest weight", summary.latestWeightKg?.let { "${it.formatOne()} kg" } ?: "—", onPrimary, Modifier.weight(1f))
+                        HeroMetric("7-day volume", "${summary.weeklyVolumeKg.roundToInt()} kg", onPrimary, Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgressCompassCard(uiState: ProgressUiState) {
+    val activeStreams = listOf(
+        uiState.calories.isNotEmpty(),
+        uiState.bodyWeight.isNotEmpty(),
+        uiState.workoutVolume.isNotEmpty()
+    ).count { it }
+    SectionCard(
+        title = "Progress compass",
+        subtitle = "Consistency makes each chart more useful.",
+        accent = true
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(46.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Explore, contentDescription = null, modifier = Modifier.size(24.dp))
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("$activeStreams of 3 streams active", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    when (activeStreams) {
+                        3 -> "Nutrition, weight, and training are all in view."
+                        0 -> "Start anywhere; your baseline builds one log at a time."
+                        else -> "Keep logging to connect more of the picture."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
             }
         }
     }
@@ -125,7 +191,7 @@ private fun HeroMetric(label: String, value: String, onPrimary: Color, modifier:
 
 @Composable
 private fun BodyWeightAnalyticsCard(analytics: BodyWeightAnalytics) {
-    SectionCard(title = "Body Weight Analytics") {
+    SectionCard(title = "Weight depth", subtitle = "Smoothed direction beyond daily movement.") {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             AnalyticsRow("Raw weight", analytics.latestWeightKg?.let { "${it.formatOne()} kg" } ?: "-")
             AnalyticsRow("7-day average", analytics.sevenDayAverageKg?.let { "${it.formatOne()} kg" } ?: "-")
@@ -152,7 +218,7 @@ private fun NutritionAnalyticsCard(windows: List<NutritionAnalyticsWindow>) {
     val loggedDayLabel = if (window.loggedDays == 1) "1 logged day" else "${window.loggedDays} logged days"
 
     SectionCard(
-        title = "Nutrition insights",
+        title = "Nutrition current",
         subtitle = "Daily averages based on $loggedDayLabel"
     ) {
         Row(
@@ -222,7 +288,7 @@ private fun NutritionAnalyticsCard(windows: List<NutritionAnalyticsWindow>) {
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             NutritionMetric("Protein", window.averageProtein, Modifier.weight(1f))
-            NutritionMetric("Carbohydrates", window.averageCarbs, Modifier.weight(1f))
+            NutritionMetric("Carbs", window.averageCarbs, Modifier.weight(1f))
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -266,44 +332,35 @@ private fun NutritionMetric(label: String, grams: Double, modifier: Modifier = M
 
 @Composable
 private fun MuscleGroupVolumeCard(groups: List<MuscleGroupVolumeAnalytics>) {
-    SectionCard(title = "Training Volume", subtitle = "Current week vs previous week") {
+    SectionCard(title = "Training tide", subtitle = "Current week compared with the previous wave") {
         if (groups.isEmpty()) {
             Text("Log workouts to compare weekly volume by muscle group.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         groups.forEach { group ->
-            AnalyticsRow(
-                label = group.muscleGroup,
-                value = "${group.weeklySets} sets | ${group.weeklyVolumeKg.roundToInt()} kg | ${group.changePercent?.let { "${it.roundToInt()}%" } ?: "new"}"
-            )
-        }
-    }
-}
-
-@Composable
-private fun StrengthProgressCard(exercises: List<StrengthExerciseAnalytics>) {
-    SectionCard(title = "Strength Progress") {
-        if (exercises.isEmpty()) {
-            Text("Log sets to see exercise-level strength progress.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        exercises.forEach { exercise ->
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(exercise.exerciseName, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Est. 1RM ${exercise.estimatedOneRepMax.lastOrNull()?.value?.roundToInt() ?: 0} kg | Max ${exercise.maxWeightKg.roundToInt()} kg | Best ${exercise.bestReps} reps",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "Volume ${exercise.volumeKg.roundToInt()} kg | ${exercise.workoutFrequency} sessions",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (exercise.estimatedOneRepMax.size > 1) {
-                    TrendLine(points = exercise.estimatedOneRepMax, lineColor = MaterialTheme.colorScheme.tertiary)
-                }
-                if (exercise.recentSessions.isNotEmpty()) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.AutoGraph, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(group.muscleGroup, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "${group.weeklySets} sets · ${group.weeklyVolumeKg.roundToInt()} kg",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Text(
-                        "Recent: ${exercise.recentSessions.joinToString()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        group.changePercent?.let { "${it.roundToInt()}%" } ?: "New",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -312,10 +369,57 @@ private fun StrengthProgressCard(exercises: List<StrengthExerciseAnalytics>) {
 }
 
 @Composable
+private fun StrengthProgressCard(exercises: List<StrengthExerciseAnalytics>) {
+    SectionCard(title = "Strength current", subtitle = "How your strongest movements are travelling.") {
+        if (exercises.isEmpty()) {
+            Text("Log sets to see exercise-level strength progress.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        exercises.forEach { exercise ->
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(exercise.exerciseName, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Est. 1RM ${exercise.estimatedOneRepMax.lastOrNull()?.value?.roundToInt() ?: 0} kg | Max ${exercise.maxWeightKg.roundToInt()} kg | Best ${exercise.bestReps} reps",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "Volume ${exercise.volumeKg.roundToInt()} kg | ${exercise.workoutFrequency} sessions",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (exercise.estimatedOneRepMax.size > 1) {
+                        TrendLine(points = exercise.estimatedOneRepMax, lineColor = MaterialTheme.colorScheme.tertiary)
+                    }
+                    if (exercise.recentSessions.isNotEmpty()) {
+                        Text(
+                            "Recent: ${exercise.recentSessions.joinToString()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AnalyticsRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, fontWeight = FontWeight.Medium)
-        Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth < 360.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(label, fontWeight = FontWeight.Medium)
+                Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(label, fontWeight = FontWeight.Medium)
+                Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
+            }
+        }
     }
 }
 
@@ -352,7 +456,7 @@ private fun TrendLine(points: List<TrendPoint>, lineColor: Color) {
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
-            .height(132.dp)
+            .height(112.dp)
             .semantics {
                 val first = points.first()
                 val last = points.last()

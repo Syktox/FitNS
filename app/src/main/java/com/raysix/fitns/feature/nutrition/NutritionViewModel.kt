@@ -74,9 +74,14 @@ private data class NutritionSecondarySources(
 data class BarcodeLookupUiState(
     val barcode: String = "",
     val loading: Boolean = false,
+    val status: BarcodeLookupStatus = BarcodeLookupStatus.Idle,
     val statusMessage: String? = null,
-    val prefillInput: ManualFoodInput? = null
+    val prefillInput: ManualFoodInput? = null,
+    val savingFood: Boolean = false,
+    val saveError: String? = null
 )
+
+enum class BarcodeLookupStatus { Idle, Loading, Success, Error }
 
 private val EmptyNutritionDashboard = DailyNutritionDashboard(
     goal = NutritionGoal(
@@ -166,7 +171,9 @@ class NutritionViewModel @Inject constructor(
     fun updateBarcode(barcode: String) {
         barcodeLookup.value = barcodeLookup.value.copy(
             barcode = barcode,
-            statusMessage = null
+            status = BarcodeLookupStatus.Idle,
+            statusMessage = null,
+            saveError = null
         )
     }
 
@@ -183,20 +190,54 @@ class NutritionViewModel @Inject constructor(
         barcodeLookup.value = barcodeLookup.value.copy(
             barcode = "",
             loading = false,
+            status = BarcodeLookupStatus.Success,
             statusMessage = "Nutrition label values were filled in. Review them before saving.",
-            prefillInput = input
+            prefillInput = input,
+            saveError = null
+        )
+    }
+
+    fun selectRecentFood(entry: FoodLogEntry) {
+        setFoodPrefill(entry.toManualFoodInput(), "Recent food loaded. Adjust the portion before saving.")
+    }
+
+    fun selectFavoriteFood(favorite: FoodFavoritePreset) {
+        setFoodPrefill(
+            favorite.toFoodLogEntry(MealType.Snack).toManualFoodInput(),
+            "Favorite loaded. Adjust the portion before saving."
+        )
+    }
+
+    fun selectCustomFood(customFood: CustomFood) {
+        setFoodPrefill(
+            customFood.toFoodLogEntry(MealType.Snack).toManualFoodInput(),
+            "Custom food loaded. Adjust the portion before saving."
+        )
+    }
+
+    private fun setFoodPrefill(input: ManualFoodInput, message: String) {
+        barcodeLookup.value = barcodeLookup.value.copy(
+            loading = false,
+            status = BarcodeLookupStatus.Success,
+            statusMessage = message,
+            prefillInput = input,
+            saveError = null
         )
     }
 
     fun lookupBarcode() {
         val barcode = barcodeLookup.value.barcode.trim()
         if (barcode.isBlank()) {
-            barcodeLookup.value = barcodeLookup.value.copy(statusMessage = "Enter a barcode first.")
+            barcodeLookup.value = barcodeLookup.value.copy(
+                status = BarcodeLookupStatus.Error,
+                statusMessage = "Enter a barcode first."
+            )
             return
         }
         viewModelScope.launch {
             barcodeLookup.value = barcodeLookup.value.copy(
                 loading = true,
+                status = BarcodeLookupStatus.Loading,
                 statusMessage = "Looking up barcode...",
                 prefillInput = null
             )
@@ -210,11 +251,15 @@ class NutritionViewModel @Inject constructor(
                 is AppResult.Success -> BarcodeLookupUiState(
                     barcode = barcode,
                     loading = false,
+                    status = BarcodeLookupStatus.Success,
                     statusMessage = "Product found. Review the details before saving.",
-                    prefillInput = result.value.toManualFoodInput()
+                    prefillInput = result.value.toManualFoodInput(),
+                    savingFood = barcodeLookup.value.savingFood,
+                    saveError = null
                 )
                 is AppResult.Failure -> barcodeLookup.value.copy(
                     loading = false,
+                    status = BarcodeLookupStatus.Error,
                     statusMessage = result.error.toLookupMessage(),
                     prefillInput = null
                 )
@@ -227,6 +272,8 @@ class NutritionViewModel @Inject constructor(
     }
 
     fun addFood(input: ManualFoodInput, onSaved: () -> Unit) {
+        if (barcodeLookup.value.savingFood) return
+        barcodeLookup.value = barcodeLookup.value.copy(savingFood = true, saveError = null)
         viewModelScope.launch {
             val result = nutritionRepository.addFood(
                 FoodLogEntry(
@@ -253,9 +300,16 @@ class NutritionViewModel @Inject constructor(
             when (result) {
                 is AppResult.Success -> {
                     errorMessage.value = null
+                    barcodeLookup.value = barcodeLookup.value.copy(savingFood = false, saveError = null)
                     onSaved()
                 }
-                is AppResult.Failure -> errorMessage.value = "Entry could not be saved."
+                is AppResult.Failure -> {
+                    errorMessage.value = "Entry could not be saved."
+                    barcodeLookup.value = barcodeLookup.value.copy(
+                        savingFood = false,
+                        saveError = "Food could not be added. Check the values and try again."
+                    )
+                }
             }
         }
     }
@@ -293,27 +347,31 @@ class NutritionViewModel @Inject constructor(
         }
     }
 
-    fun duplicateFood(entry: FoodLogEntry) {
+    fun duplicateFood(entry: FoodLogEntry, mealType: MealType) {
         viewModelScope.launch {
             val result = nutritionRepository.addFood(
                 entry.copy(
                     id = UUID.randomUUID().toString(),
+                    mealType = mealType,
                     consumedAt = System.currentTimeMillis()
                 )
             )
             errorMessage.value = when (result) {
-                is AppResult.Success -> null
+                is AppResult.Success -> {
+                    confirmationMessage.value = "${entry.name} logged to ${mealType.displayLabel().lowercase()}."
+                    null
+                }
                 is AppResult.Failure -> "Entry could not be duplicated."
             }
         }
     }
 
-    fun useCustomFood(customFood: CustomFood, mealType: MealType = MealType.Snack) {
+    fun useCustomFood(customFood: CustomFood, mealType: MealType) {
         viewModelScope.launch {
             val result = nutritionRepository.addFood(customFood.toFoodLogEntry(mealType))
             errorMessage.value = when (result) {
                 is AppResult.Success -> {
-                    confirmationMessage.value = "${customFood.name} logged."
+                    confirmationMessage.value = "${customFood.name} logged to ${mealType.displayLabel().lowercase()}."
                     null
                 }
                 is AppResult.Failure -> "Custom food could not be logged."
@@ -321,11 +379,14 @@ class NutritionViewModel @Inject constructor(
         }
     }
 
-    fun useFavorite(favorite: FoodFavoritePreset) {
+    fun useFavorite(favorite: FoodFavoritePreset, mealType: MealType) {
         viewModelScope.launch {
-            val result = nutritionRepository.addFood(favorite.toFoodLogEntry())
+            val result = nutritionRepository.addFood(favorite.toFoodLogEntry(mealType))
             errorMessage.value = when (result) {
-                is AppResult.Success -> null
+                is AppResult.Success -> {
+                    confirmationMessage.value = "${favorite.name} logged to ${mealType.displayLabel().lowercase()}."
+                    null
+                }
                 is AppResult.Failure -> "Favorite could not be logged."
             }
         }
@@ -470,12 +531,33 @@ class NutritionViewModel @Inject constructor(
         )
     }
 
-    private fun FoodFavoritePreset.toFoodLogEntry(): FoodLogEntry {
+    private fun FoodLogEntry.toManualFoodInput(): ManualFoodInput {
+        return ManualFoodInput(
+            name = name,
+            brand = brand,
+            grams = grams,
+            calories = nutrition.caloriesKcal,
+            protein = nutrition.proteinGrams,
+            carbohydrates = nutrition.carbohydratesGrams,
+            sugar = nutrition.sugarGrams,
+            fat = nutrition.fatGrams,
+            saturatedFat = nutrition.saturatedFatGrams,
+            fiber = nutrition.fiberGrams,
+            salt = nutrition.saltGrams,
+            sodiumMilligrams = nutrition.sodiumMilligrams,
+            mealType = mealType,
+            notes = notes,
+            micronutrients = micronutrients,
+            dataQuality = dataQuality
+        )
+    }
+
+    private fun FoodFavoritePreset.toFoodLogEntry(mealType: MealType): FoodLogEntry {
         val factor = servingSizeGrams / 100.0
         return FoodLogEntry(
             name = name,
             brand = brand,
-            mealType = MealType.Snack,
+            mealType = mealType,
             grams = servingSizeGrams,
             nutrition = NutritionFacts(
                 caloriesKcal = nutritionPer100g.caloriesKcal * factor,

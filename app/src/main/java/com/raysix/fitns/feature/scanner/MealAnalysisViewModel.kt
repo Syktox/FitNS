@@ -29,7 +29,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-enum class MealAnalysisPhase { Idle, Analyzing, Review, Saving }
+enum class MealAnalysisPhase { Capture, Analyzing, Review, Saving, Error }
+
+enum class MealAnalysisFailure { PrivacyDisabled, InvalidImage, NoFoodDetected, Remote }
 
 data class EditableMealItem(
     val id: String,
@@ -43,13 +45,27 @@ data class EditableMealItem(
 )
 
 data class MealAnalysisUiState(
-    val phase: MealAnalysisPhase = MealAnalysisPhase.Idle,
+    val phase: MealAnalysisPhase = MealAnalysisPhase.Capture,
     val previewBitmap: ImageBitmap? = null,
-    val mealType: MealType = MealType.Snack,
+    val mealType: MealType = defaultMealType(),
     val items: List<EditableMealItem> = emptyList(),
     val disclaimer: String? = null,
     val errorMessage: String? = null,
+    val failure: MealAnalysisFailure? = null,
     val loading: Boolean = false
+) {
+    val totals: MealAnalysisTotals
+        get() = calculateMealAnalysisTotals(items)
+
+    val canSave: Boolean
+        get() = items.isNotEmpty() && items.all(EditableMealItem::isValid)
+}
+
+data class MealAnalysisTotals(
+    val calories: Double = 0.0,
+    val protein: Double = 0.0,
+    val carbohydrates: Double = 0.0,
+    val fat: Double = 0.0
 )
 
 @HiltViewModel
@@ -59,6 +75,7 @@ class MealAnalysisViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository
 ) : ViewModel() {
     private val state = MutableStateFlow(MealAnalysisUiState())
+    private var lastCapturedBytes: ByteArray? = null
 
     val uiState: StateFlow<MealAnalysisUiState> = state.stateIn(
         scope = viewModelScope,
@@ -67,37 +84,66 @@ class MealAnalysisViewModel @Inject constructor(
     )
 
     fun onImageCaptured(bytes: ByteArray) {
+        lastCapturedBytes = bytes.copyOf()
+        analyze(bytes)
+    }
+
+    fun retryAnalysis() {
+        val snapshot = state.value
+        if (snapshot.loading || snapshot.phase != MealAnalysisPhase.Error) return
+
+        val bytes = lastCapturedBytes
+        if (bytes == null) {
+            state.value = snapshot.copy(
+                phase = MealAnalysisPhase.Error,
+                failure = MealAnalysisFailure.InvalidImage,
+                errorMessage = "The original photo is no longer available. Take another photo."
+            )
+            return
+        }
+        analyze(bytes)
+    }
+
+    fun retake() {
+        lastCapturedBytes = null
+        state.value = MealAnalysisUiState(mealType = state.value.mealType)
+    }
+
+    private fun analyze(bytes: ByteArray) {
         state.value = state.value.copy(
             loading = true,
             errorMessage = null,
+            failure = null,
+            items = emptyList(),
+            disclaimer = null,
             phase = MealAnalysisPhase.Analyzing
         )
         viewModelScope.launch {
+            val bitmap = withContext(Dispatchers.Default) { decodeScaled(bytes) }
+            if (bitmap == null) {
+                state.value = state.value.copy(
+                    loading = false,
+                    phase = MealAnalysisPhase.Error,
+                    previewBitmap = null,
+                    failure = MealAnalysisFailure.InvalidImage,
+                    errorMessage = "The photo could not be read. Try taking it again."
+                )
+                return@launch
+            }
+            state.value = state.value.copy(previewBitmap = bitmap.asImageBitmap())
+
             val uploadEnabled = settingsRepository.observeMealPhotoAnalysisEnabled().first()
             if (!uploadEnabled) {
                 state.value = state.value.copy(
                     loading = false,
-                    phase = MealAnalysisPhase.Idle,
-                    previewBitmap = null,
+                    phase = MealAnalysisPhase.Error,
+                    failure = MealAnalysisFailure.PrivacyDisabled,
                     errorMessage = "Enable meal photo analysis in Settings → Privacy & Data before scanning."
                 )
                 return@launch
             }
 
-            val bitmap = withContext(Dispatchers.Default) { decodeScaled(bytes) }
-            if (bitmap == null) {
-                state.value = state.value.copy(
-                    loading = false,
-                    phase = MealAnalysisPhase.Idle,
-                    errorMessage = "The photo could not be read. Try taking it again."
-                )
-                return@launch
-            }
             val base64 = withContext(Dispatchers.Default) { compressToBase64(bitmap) }
-            state.value = state.value.copy(
-                previewBitmap = bitmap.asImageBitmap(),
-                errorMessage = null
-            )
 
             val settings = settingsRepository.observeN8nSettings().first()
             val token = settingsRepository.readBearerToken()
@@ -113,10 +159,10 @@ class MealAnalysisViewModel @Inject constructor(
                     if (detectedItems.isEmpty()) {
                         state.value.copy(
                             loading = false,
-                            phase = MealAnalysisPhase.Idle,
-                            previewBitmap = null,
+                            phase = MealAnalysisPhase.Error,
                             items = emptyList(),
                             disclaimer = null,
+                            failure = MealAnalysisFailure.NoFoodDetected,
                             errorMessage = "No food was detected. Try another angle or choose a clearer photo."
                         )
                     } else {
@@ -136,16 +182,17 @@ class MealAnalysisViewModel @Inject constructor(
                                 )
                             },
                             disclaimer = result.value.disclaimer,
+                            failure = null,
                             errorMessage = null
                         )
                     }
                 }
                 is AppResult.Failure -> state.value.copy(
                     loading = false,
-                    phase = MealAnalysisPhase.Idle,
-                    previewBitmap = null,
+                    phase = MealAnalysisPhase.Error,
                     items = emptyList(),
                     disclaimer = null,
+                    failure = MealAnalysisFailure.Remote,
                     errorMessage = result.error.toUserMessage()
                 )
             }
@@ -156,34 +203,72 @@ class MealAnalysisViewModel @Inject constructor(
         state.value = state.value.copy(mealType = mealType)
     }
 
-    fun updateItem(id: String, grams: String, calories: String, protein: String, carbs: String, fat: String) {
+    fun updateItem(
+        id: String,
+        name: String,
+        grams: String,
+        calories: String,
+        protein: String,
+        carbs: String,
+        fat: String
+    ) {
         state.value = state.value.copy(
             items = state.value.items.map { item ->
                 if (item.id == id) {
-                    item.copy(grams = grams, calories = calories, protein = protein, carbs = carbs, fat = fat)
+                    item.copy(
+                        name = name,
+                        grams = grams,
+                        calories = calories,
+                        protein = protein,
+                        carbs = carbs,
+                        fat = fat
+                    )
                 } else {
                     item
                 }
-            }
+            },
+            errorMessage = null
         )
     }
 
     fun removeItem(id: String) {
-        state.value = state.value.copy(items = state.value.items.filterNot { it.id == id })
+        state.value = state.value.copy(
+            items = state.value.items.filterNot { it.id == id },
+            errorMessage = null
+        )
+    }
+
+    fun addItem() {
+        val nextIndex = state.value.items.size + 1
+        state.value = state.value.copy(
+            phase = MealAnalysisPhase.Review,
+            items = state.value.items + EditableMealItem(
+                id = "manual-${java.util.UUID.randomUUID()}",
+                name = "Food item $nextIndex",
+                grams = "100",
+                confidence = 0.0,
+                calories = "",
+                protein = "",
+                carbs = "",
+                fat = ""
+            ),
+            errorMessage = null
+        )
     }
 
     fun save(onSaved: () -> Unit) {
         val snapshot = state.value
-        if (snapshot.items.isEmpty()) {
-            state.value = snapshot.copy(errorMessage = "There are no items to save.")
+        if (snapshot.loading || snapshot.phase != MealAnalysisPhase.Review) return
+        if (!snapshot.canSave) {
+            state.value = snapshot.copy(errorMessage = "Review the highlighted fields before logging this meal.")
             return
         }
         state.value = snapshot.copy(loading = true, errorMessage = null, phase = MealAnalysisPhase.Saving)
         viewModelScope.launch {
-            val entries = snapshot.items.mapNotNull { item ->
-                val grams = item.grams.toUserDecimalOrNull()?.takeIf { it > 0.0 } ?: return@mapNotNull null
+            val entries = snapshot.items.map { item ->
+                val grams = requireNotNull(item.grams.toUserDecimalOrNull())
                 FoodLogEntry(
-                    name = item.name.ifBlank { "Analyzed meal item" },
+                    name = item.name.trim(),
                     brand = null,
                     mealType = snapshot.mealType,
                     grams = grams,
@@ -205,25 +290,18 @@ class MealAnalysisViewModel @Inject constructor(
                     }
                 )
             }
-            if (entries.isEmpty()) {
-                state.value = state.value.copy(loading = false, errorMessage = "No valid items to save.")
-                return@launch
-            }
-            val errors = mutableListOf<String>()
-            entries.forEach { entry ->
-                val result = nutritionRepository.addFood(entry)
-                if (result is AppResult.Failure) {
-                    errors += entry.name
+            when (nutritionRepository.addFoods(entries)) {
+                is AppResult.Success -> {
+                    state.value = state.value.copy(loading = false)
+                    onSaved()
                 }
-            }
-            if (errors.isEmpty()) {
-                state.value = state.value.copy(loading = false)
-                onSaved()
-            } else {
-                state.value = state.value.copy(
-                    loading = false,
-                    errorMessage = "Some items could not be saved: ${errors.take(3).joinToString(", ")}"
-                )
+                is AppResult.Failure -> {
+                    state.value = state.value.copy(
+                        loading = false,
+                        phase = MealAnalysisPhase.Review,
+                        errorMessage = "The meal could not be logged. Nothing was added; try again."
+                    )
+                }
             }
         }
     }
@@ -256,6 +334,32 @@ class MealAnalysisViewModel @Inject constructor(
             is AppError.Remote -> message
             is AppError.Unknown -> message
         }
+    }
+}
+
+internal fun EditableMealItem.isValid(): Boolean {
+    val validGrams = grams.toUserDecimalOrNull()?.let { it.isFinite() && it > 0.0 } == true
+    val validNutrition = listOf(calories, protein, carbs, fat).all { value ->
+        value.toUserDecimalOrNull()?.let { it.isFinite() && it >= 0.0 } == true
+    }
+    return name.isNotBlank() && validGrams && validNutrition
+}
+
+internal fun calculateMealAnalysisTotals(items: List<EditableMealItem>): MealAnalysisTotals {
+    return MealAnalysisTotals(
+        calories = items.sumOf { it.calories.toUserDecimalOrNull() ?: 0.0 },
+        protein = items.sumOf { it.protein.toUserDecimalOrNull() ?: 0.0 },
+        carbohydrates = items.sumOf { it.carbs.toUserDecimalOrNull() ?: 0.0 },
+        fat = items.sumOf { it.fat.toUserDecimalOrNull() ?: 0.0 }
+    )
+}
+
+private fun defaultMealType(): MealType {
+    return when (java.time.LocalTime.now().hour) {
+        in 5..10 -> MealType.Breakfast
+        in 11..15 -> MealType.Lunch
+        in 16..21 -> MealType.Dinner
+        else -> MealType.Snack
     }
 }
 

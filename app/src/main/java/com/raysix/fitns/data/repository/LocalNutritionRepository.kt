@@ -4,6 +4,8 @@ import com.raysix.fitns.core.model.AppError
 import com.raysix.fitns.core.model.AppResult
 import com.raysix.fitns.core.sync.SyncPayloadFactory
 import com.raysix.fitns.core.sync.SyncQueueWriter
+import com.raysix.fitns.core.undo.AppUndoRedoManager
+import com.raysix.fitns.core.undo.UndoRedoAction
 import com.raysix.fitns.data.local.dao.FoodDao
 import com.raysix.fitns.data.local.entity.DailyNutritionSummaryEntity
 import com.raysix.fitns.data.local.entity.FoodNutrientEntity
@@ -49,7 +51,8 @@ class LocalNutritionRepository @Inject constructor(
     private val syncQueueWriter: SyncQueueWriter,
     private val syncPayloadFactory: SyncPayloadFactory,
     private val profileRepository: ProfileRepository,
-    private val mealScaler: MealScaler
+    private val mealScaler: MealScaler,
+    private val undoRedoManager: AppUndoRedoManager
 ) : NutritionRepository {
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeToday(): Flow<DailyNutritionDashboard> {
@@ -140,11 +143,43 @@ class LocalNutritionRepository @Inject constructor(
             )
         }
         syncQueueWriter.schedule()
+        recordUndo(
+            label = "food entry",
+            undo = { deleteFood(entry) },
+            redo = { addFood(entry) }
+        )
+        return AppResult.Success(Unit)
+    }
+
+    override suspend fun addFoods(entries: List<FoodLogEntry>): AppResult<Unit> {
+        if (entries.isEmpty()) {
+            return AppResult.Failure(AppError.Validation("Add at least one food."))
+        }
+        entries.firstNotNullOfOrNull(::validate)?.let { error ->
+            return AppResult.Failure(error)
+        }
+        database.withTransaction {
+            entries.forEach { entry ->
+                foodDao.upsertFoodEntry(entry.toEntity())
+                syncQueueWriter.enqueueOnly(
+                    entityType = EntityTypeFoodEntry,
+                    entityId = entry.id,
+                    operation = OperationUpsert,
+                    payloadJson = syncPayloadFactory.foodEntry(entry, OperationUpsert)
+                )
+            }
+        }
+        syncQueueWriter.schedule()
+        recordUndo(
+            label = "${entries.size} food entries",
+            undo = { entries.forEach { deleteFood(it) } },
+            redo = { addFoods(entries) }
+        )
         return AppResult.Success(Unit)
     }
 
     override suspend fun updateFood(entry: FoodLogEntry): AppResult<Unit> {
-        val existing = foodDao.findFoodEntry(entry.id)
+        val existing = foodDao.findFoodEntry(entry.id)?.toDomain()
             ?: return AppResult.Failure(AppError.NotFound)
         val error = validate(entry)
         if (error != null) return AppResult.Failure(error)
@@ -159,6 +194,11 @@ class LocalNutritionRepository @Inject constructor(
             )
         }
         syncQueueWriter.schedule()
+        recordUndo(
+            label = "food edit",
+            undo = { updateFood(existing) },
+            redo = { updateFood(updated) }
+        )
         return AppResult.Success(Unit)
     }
 
@@ -201,6 +241,22 @@ class LocalNutritionRepository @Inject constructor(
                 syncStatus = SyncStatus.PendingSync,
                 serverVersion = null
             )
+        )
+        recordUndo(
+            label = "favorite food",
+            undo = {
+                deleteFavorite(
+                    FoodFavoritePreset(
+                        id = productId,
+                        name = entry.name,
+                        brand = entry.brand,
+                        servingSizeGrams = entry.grams,
+                        nutritionPer100g = entry.nutrition,
+                        notes = entry.notes
+                    )
+                )
+            },
+            redo = { saveFavorite(entry) }
         )
         return AppResult.Success(Unit)
     }
@@ -245,11 +301,45 @@ class LocalNutritionRepository @Inject constructor(
                 serverVersion = null
             )
         )
+        recordUndo(
+            label = "custom food",
+            undo = {
+                deleteCustomFood(
+                    CustomFood(
+                        id = productId,
+                        name = entry.name,
+                        brand = entry.brand,
+                        servingSizeGrams = entry.grams,
+                        nutritionPer100g = entry.nutrition,
+                        notes = entry.notes,
+                        micronutrients = entry.micronutrients
+                    )
+                )
+            },
+            redo = { saveCustomFood(entry) }
+        )
         return AppResult.Success(Unit)
     }
 
     override suspend fun deleteCustomFood(customFood: CustomFood): AppResult<Unit> {
         foodDao.softDeleteFoodProduct(customFood.id, System.currentTimeMillis())
+        recordUndo(
+            label = "custom food delete",
+            undo = {
+                saveCustomFood(
+                    FoodLogEntry(
+                        name = customFood.name,
+                        brand = customFood.brand,
+                        mealType = MealType.Custom,
+                        grams = customFood.servingSizeGrams,
+                        nutrition = customFood.nutritionPer100g,
+                        notes = customFood.notes,
+                        micronutrients = customFood.micronutrients
+                    )
+                )
+            },
+            redo = { deleteCustomFood(customFood) }
+        )
         return AppResult.Success(Unit)
     }
 
@@ -273,11 +363,21 @@ class LocalNutritionRepository @Inject constructor(
                 item.toEntity(savedMealId = meal.id, sortOrder = index, now = now)
             }
         )
+        recordUndo(
+            label = "saved meal",
+            undo = { deleteSavedMeal(meal) },
+            redo = { saveMeal(meal) }
+        )
         return AppResult.Success(Unit)
     }
 
     override suspend fun deleteSavedMeal(meal: SavedMeal): AppResult<Unit> {
         foodDao.softDeleteSavedMealCascade(meal.id, System.currentTimeMillis())
+        recordUndo(
+            label = "saved meal delete",
+            undo = { saveMeal(meal) },
+            redo = { deleteSavedMeal(meal) }
+        )
         return AppResult.Success(Unit)
     }
 
@@ -311,11 +411,32 @@ class LocalNutritionRepository @Inject constructor(
             }
         }
         syncQueueWriter.schedule()
+        recordUndo(
+            label = "${copies.size} copied food entries",
+            undo = { copies.forEach { deleteFood(it) } },
+            redo = { addFoods(copies) }
+        )
         return AppResult.Success(Unit)
     }
 
     override suspend fun deleteFavorite(favorite: FoodFavoritePreset): AppResult<Unit> {
         foodDao.softDeleteFoodProduct(favorite.id, System.currentTimeMillis())
+        recordUndo(
+            label = "favorite delete",
+            undo = {
+                saveFavorite(
+                    FoodLogEntry(
+                        name = favorite.name,
+                        brand = favorite.brand,
+                        mealType = MealType.Custom,
+                        grams = favorite.servingSizeGrams,
+                        nutrition = favorite.nutritionPer100g,
+                        notes = favorite.notes
+                    )
+                )
+            },
+            redo = { deleteFavorite(favorite) }
+        )
         return AppResult.Success(Unit)
     }
 
@@ -348,6 +469,11 @@ class LocalNutritionRepository @Inject constructor(
                 serverVersion = null
             )
         )
+        recordUndo(
+            label = "water adjustment",
+            undo = { removeWater(milliliters) },
+            redo = { addWater(milliliters) }
+        )
         return AppResult.Success(Unit)
     }
 
@@ -361,6 +487,11 @@ class LocalNutritionRepository @Inject constructor(
             dayStartMillis = dayStartMillis,
             milliliters = milliliters,
             updatedAt = System.currentTimeMillis()
+        )
+        recordUndo(
+            label = "water adjustment",
+            undo = { addWater(milliliters) },
+            redo = { removeWater(milliliters) }
         )
         return AppResult.Success(Unit)
     }
@@ -378,7 +509,16 @@ class LocalNutritionRepository @Inject constructor(
             )
         }
         syncQueueWriter.schedule()
+        recordUndo(
+            label = "food delete",
+            undo = { addFood(existing) },
+            redo = { deleteFood(existing) }
+        )
         return AppResult.Success(Unit)
+    }
+
+    private fun recordUndo(label: String, undo: suspend () -> Unit, redo: suspend () -> Unit) {
+        undoRedoManager.record(UndoRedoAction(label = label, undo = undo, redo = redo))
     }
 
     private fun validate(entry: FoodLogEntry): AppError? {

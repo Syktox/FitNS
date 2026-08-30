@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -21,8 +22,8 @@ import androidx.compose.ui.unit.dp
 
 private const val WideThresholdDp = 700
 private const val CompactHeightThresholdDp = 500
-private val ReadableContentMaxWidth = 860.dp
-private val TwoPaneContentMaxWidth = 1280.dp
+private val ReadableContentMaxWidth = 1040.dp
+private val TwoPaneContentMaxWidth = 1560.dp
 
 val LocalFloatingNavigationClearance = staticCompositionLocalOf { 0.dp }
 
@@ -44,7 +45,7 @@ fun isCompactHeight(): Boolean = LocalConfiguration.current.screenHeightDp < Com
  * Shared horizontal padding for a content column depending on screen width.
  */
 @Composable
-fun adaptiveHorizontalPadding() = if (isWideScreen()) 32.dp else 16.dp
+fun adaptiveHorizontalPadding() = if (isWideScreen()) 24.dp else 16.dp
 
 /**
  * Constrains a [Column] to a readable maximum width, centers it on wide screens,
@@ -54,7 +55,7 @@ fun adaptiveHorizontalPadding() = if (isWideScreen()) 32.dp else 16.dp
 @Composable
 fun AdaptiveColumn(
     modifier: Modifier = Modifier,
-    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(16.dp),
+    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(14.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
     val bottomClearance = LocalFloatingNavigationClearance.current
@@ -66,6 +67,7 @@ fun AdaptiveColumn(
             modifier = Modifier
                 .widthIn(max = ReadableContentMaxWidth)
                 .fillMaxWidth()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = adaptiveHorizontalPadding())
                 .padding(bottom = bottomClearance + 20.dp),
@@ -88,6 +90,7 @@ fun AdaptiveTwoColumn(
     side: @Composable ColumnScope.() -> Unit
 ) {
     if (isWideScreen()) {
+        val bottomClearance = LocalFloatingNavigationClearance.current
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.TopCenter
@@ -96,25 +99,26 @@ fun AdaptiveTwoColumn(
                 modifier = Modifier
                     .widthIn(max = TwoPaneContentMaxWidth)
                     .fillMaxWidth()
+                    .imePadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = adaptiveHorizontalPadding())
-                    .padding(bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(bottom = bottomClearance + 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 header?.invoke()
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp)
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Column(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         main()
                     }
                     Column(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         side()
                     }
@@ -131,10 +135,11 @@ fun AdaptiveTwoColumn(
                 modifier = Modifier
                     .widthIn(max = ReadableContentMaxWidth)
                     .fillMaxWidth()
+                    .imePadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = adaptiveHorizontalPadding())
                     .padding(bottom = bottomClearance + 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 header?.invoke()
                 main()
@@ -156,6 +161,7 @@ fun AdaptiveGutterLayout(
     main: @Composable ColumnScope.() -> Unit
 ) {
     if (isWideScreen()) {
+        val bottomClearance = LocalFloatingNavigationClearance.current
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.TopCenter
@@ -164,22 +170,23 @@ fun AdaptiveGutterLayout(
                 modifier = Modifier
                     .widthIn(max = TwoPaneContentMaxWidth)
                     .fillMaxWidth()
+                    .imePadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = adaptiveHorizontalPadding())
-                    .padding(bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(bottom = bottomClearance + 20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 header?.invoke()
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(20.dp)
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Box(modifier = Modifier.weight(gutterWidthFraction)) {
                         gutter()
                     }
                     Column(
                         modifier = Modifier.weight(1f - gutterWidthFraction),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         main()
                     }
@@ -196,10 +203,11 @@ fun AdaptiveGutterLayout(
                 modifier = Modifier
                     .widthIn(max = ReadableContentMaxWidth)
                     .fillMaxWidth()
+                    .imePadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = adaptiveHorizontalPadding())
                     .padding(bottom = bottomClearance + 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 header?.invoke()
                 gutter()

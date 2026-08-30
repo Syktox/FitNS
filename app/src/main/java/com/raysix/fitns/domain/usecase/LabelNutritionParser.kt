@@ -102,7 +102,7 @@ class LabelNutritionParser {
 
         if (calories == null) warnings += "No calorie value was recognized. Check the nutrition table manually."
         if (protein == null) warnings += "No protein value was recognized."
-        if (carbs == null) warnings += "No carbohydrate value was recognized."
+        if (carbs == null) warnings += "No carbs value was recognized."
         if (fat == null) warnings += "No fat value was recognized."
 
         return LabelParseResult(

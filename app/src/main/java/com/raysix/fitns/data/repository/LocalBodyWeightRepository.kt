@@ -4,6 +4,8 @@ import com.raysix.fitns.core.model.AppError
 import com.raysix.fitns.core.model.AppResult
 import com.raysix.fitns.core.sync.SyncPayloadFactory
 import com.raysix.fitns.core.sync.SyncQueueWriter
+import com.raysix.fitns.core.undo.AppUndoRedoManager
+import com.raysix.fitns.core.undo.UndoRedoAction
 import com.raysix.fitns.data.local.dao.BodyWeightDao
 import com.raysix.fitns.data.local.FitNsDatabase
 import androidx.room.withTransaction
@@ -17,7 +19,8 @@ class LocalBodyWeightRepository @Inject constructor(
     private val bodyWeightDao: BodyWeightDao,
     private val database: FitNsDatabase,
     private val syncQueueWriter: SyncQueueWriter,
-    private val syncPayloadFactory: SyncPayloadFactory
+    private val syncPayloadFactory: SyncPayloadFactory,
+    private val undoRedoManager: AppUndoRedoManager
 ) : BodyWeightRepository {
     override fun observeHistory(): Flow<List<BodyWeightLogEntry>> {
         return bodyWeightDao.observeEntries().map { entries ->
@@ -38,6 +41,11 @@ class LocalBodyWeightRepository @Inject constructor(
             )
         }
         syncQueueWriter.schedule()
+        recordUndo(
+            label = "body weight entry",
+            undo = { deleteEntry(entry) },
+            redo = { addEntry(entry) }
+        )
         return AppResult.Success(Unit)
     }
 
@@ -54,7 +62,16 @@ class LocalBodyWeightRepository @Inject constructor(
             )
         }
         syncQueueWriter.schedule()
+        recordUndo(
+            label = "body weight delete",
+            undo = { addEntry(existing) },
+            redo = { deleteEntry(existing) }
+        )
         return AppResult.Success(Unit)
+    }
+
+    private fun recordUndo(label: String, undo: suspend () -> Unit, redo: suspend () -> Unit) {
+        undoRedoManager.record(UndoRedoAction(label = label, undo = undo, redo = redo))
     }
 
     private fun validate(entry: BodyWeightLogEntry): AppError? {

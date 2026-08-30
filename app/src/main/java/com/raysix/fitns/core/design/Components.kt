@@ -1,6 +1,7 @@
 package com.raysix.fitns.core.design
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,7 +11,9 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,19 +32,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 object FitNsDimens {
-    val CardPadding = 20.dp
-    val ScreenPadding = 20.dp
-    val CardRadius = 24.dp
-    val SectionSpacing = 14.dp
-    val ContentSpacing = 16.dp
+    val CardPadding = 16.dp
+    val ScreenPadding = 18.dp
+    val CardRadius = 22.dp
+    val SectionSpacing = 12.dp
+    val ContentSpacing = 14.dp
 }
 
 val FitNsRounded = RoundedCornerShape(FitNsDimens.CardRadius)
@@ -61,12 +66,25 @@ fun ScreenHeader(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                WhaleTailMark(
+                    modifier = Modifier.size(26.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { heading() }
+                )
+            }
             subtitle?.let {
                 Text(
                     text = it,
@@ -86,7 +104,7 @@ fun SectionTitle(title: String, modifier: Modifier = Modifier) {
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onSurface,
-        modifier = modifier
+        modifier = modifier.semantics { heading() }
     )
 }
 
@@ -104,7 +122,8 @@ fun ModernCard(
             modifier = modifier,
             shape = FitNsRounded,
             colors = CardDefaults.cardColors(containerColor = containerColor, contentColor = contentColor),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.58f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 0.dp),
             content = { Column(Modifier.padding(FitNsDimens.CardPadding), content = content) }
         )
     } else {
@@ -112,7 +131,8 @@ fun ModernCard(
             modifier = modifier,
             shape = FitNsRounded,
             colors = CardDefaults.cardColors(containerColor = containerColor, contentColor = contentColor),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.58f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
             content = { Column(Modifier.padding(FitNsDimens.CardPadding), content = content) }
         )
     }
@@ -147,9 +167,22 @@ fun SectionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.semantics { heading() }
+                    )
                     subtitle?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (accent) {
+                                MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.78f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
                     }
                 }
                 trailing?.invoke(this)
@@ -170,6 +203,7 @@ fun GradientHeroCard(
             .clip(FitNsRounded)
             .background(brush)
     ) {
+        OceanWaveOverlay(Modifier.matchParentSize())
         Column(Modifier.padding(FitNsDimens.CardPadding), content = content)
     }
 }
@@ -346,7 +380,7 @@ fun PillButton(
         Surface(
             onClick = onClick,
             enabled = enabled,
-            modifier = modifier,
+            modifier = modifier.heightIn(min = 48.dp),
             shape = shape,
             color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
             contentColor = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -354,15 +388,18 @@ fun PillButton(
             Text(
                 text,
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp)
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
             )
         }
     } else {
         Surface(
             onClick = onClick,
             enabled = enabled,
-            modifier = modifier,
+            modifier = modifier.heightIn(min = 48.dp),
             shape = shape,
             color = Color.Transparent,
             contentColor = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -374,8 +411,11 @@ fun PillButton(
             Text(
                 text,
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp)
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
             )
         }
     }
@@ -420,7 +460,8 @@ val BrandGradient: Brush
     @Composable get() = Brush.linearGradient(
         listOf(
             MaterialTheme.colorScheme.primary,
-            MaterialTheme.colorScheme.secondary
+            MaterialTheme.colorScheme.secondary,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
         )
     )
 

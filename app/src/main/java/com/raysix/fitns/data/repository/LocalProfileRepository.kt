@@ -4,6 +4,8 @@ import com.raysix.fitns.core.model.AppError
 import com.raysix.fitns.core.model.AppResult
 import com.raysix.fitns.core.sync.SyncPayloadFactory
 import com.raysix.fitns.core.sync.SyncQueueWriter
+import com.raysix.fitns.core.undo.AppUndoRedoManager
+import com.raysix.fitns.core.undo.UndoRedoAction
 import com.raysix.fitns.data.local.dao.ProfileDao
 import com.raysix.fitns.data.local.entity.SyncStatus
 import com.raysix.fitns.domain.model.DefaultNutrientTargets
@@ -14,6 +16,7 @@ import com.raysix.fitns.domain.model.UserProfile
 import com.raysix.fitns.domain.model.VersionedNutritionGoal
 import com.raysix.fitns.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
@@ -24,7 +27,8 @@ class LocalProfileRepository @Inject constructor(
     private val profileDao: ProfileDao,
     private val database: FitNsDatabase,
     private val syncQueueWriter: SyncQueueWriter,
-    private val syncPayloadFactory: SyncPayloadFactory
+    private val syncPayloadFactory: SyncPayloadFactory,
+    private val undoRedoManager: AppUndoRedoManager
 ) : ProfileRepository {
     override fun observeProfile(): Flow<UserProfile> {
         return profileDao.observeProfile(DefaultUserProfileId).map { entity ->
@@ -64,6 +68,7 @@ class LocalProfileRepository @Inject constructor(
     override suspend fun saveProfile(profile: UserProfile): AppResult<Unit> {
         val error = validateProfile(profile)
         if (error != null) return AppResult.Failure(error)
+        val previous = observeProfile().first()
         val savedProfile = profile.copy(id = DefaultUserProfileId)
         database.withTransaction {
             profileDao.upsertProfile(savedProfile.toEntity())
@@ -75,18 +80,30 @@ class LocalProfileRepository @Inject constructor(
             )
         }
         syncQueueWriter.schedule()
+        recordUndo(
+            label = "profile",
+            undo = { saveProfile(previous) },
+            redo = { saveProfile(savedProfile) }
+        )
         return AppResult.Success(Unit)
     }
 
     override suspend fun saveNutritionGoal(goal: NutritionGoal): AppResult<Unit> {
         val error = validateGoal(goal)
         if (error != null) return AppResult.Failure(error)
+        val previous = observeNutritionGoal().first()
         val now = System.currentTimeMillis()
         profileDao.replaceOpenNutritionGoal(goal.toVersionedEntity(now), now)
+        recordUndo(
+            label = "nutrition goals",
+            undo = { saveNutritionGoal(previous) },
+            redo = { saveNutritionGoal(goal) }
+        )
         return AppResult.Success(Unit)
     }
 
     override suspend fun saveNutrientTargets(targets: List<NutrientTarget>): AppResult<Unit> {
+        val previous = observeNutrientTargets().first()
         val invalidTarget = targets.firstOrNull {
             !it.targetAmount.isFinite() || it.targetAmount < 0.0 || it.unit.isBlank()
         }
@@ -104,7 +121,16 @@ class LocalProfileRepository @Inject constructor(
             targets = targets.map { it.toEntity(now) },
             validTo = now
         )
+        recordUndo(
+            label = "nutrient targets",
+            undo = { saveNutrientTargets(previous) },
+            redo = { saveNutrientTargets(targets) }
+        )
         return AppResult.Success(Unit)
+    }
+
+    private fun recordUndo(label: String, undo: suspend () -> Unit, redo: suspend () -> Unit) {
+        undoRedoManager.record(UndoRedoAction(label = label, undo = undo, redo = redo))
     }
 
     private fun validateProfile(profile: UserProfile): AppError? {

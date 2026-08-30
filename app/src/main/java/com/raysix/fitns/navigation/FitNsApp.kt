@@ -2,9 +2,14 @@ package com.raysix.fitns.navigation
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -13,12 +18,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Apps
@@ -38,6 +48,7 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -49,8 +60,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -62,9 +73,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -76,8 +93,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.raysix.fitns.core.design.isCompactScreen
+import com.raysix.fitns.core.design.isCompactHeight
 import com.raysix.fitns.core.design.isWideScreen
 import com.raysix.fitns.core.design.LocalFloatingNavigationClearance
+import com.raysix.fitns.core.undo.UndoRedoState
+import com.raysix.fitns.core.undo.UndoRedoViewModel
 import com.raysix.fitns.feature.bodyweight.BodyWeightScreen
 import com.raysix.fitns.feature.bodyweight.BodyWeightViewModel
 import com.raysix.fitns.feature.dashboard.DashboardScreen
@@ -110,6 +130,7 @@ import com.raysix.fitns.feature.workout.WorkoutHistoryScreen
 import com.raysix.fitns.feature.workout.WorkoutStartScreen
 import com.raysix.fitns.feature.workout.WorkoutViewModel
 import com.raysix.fitns.domain.repository.BottomNavigationDestination
+import com.raysix.fitns.R
 
 private enum class Route(
     val value: String,
@@ -146,14 +167,22 @@ private enum class Route(
 fun FitNsApp() {
     val navController = rememberNavController()
     val primaryNavigationViewModel: PrimaryNavigationViewModel = hiltViewModel()
+    val undoRedoViewModel: UndoRedoViewModel = hiltViewModel()
     val selectedDestinations = primaryNavigationViewModel.destinations.collectAsStateWithLifecycle().value
+    val undoRedoState = undoRedoViewModel.state.collectAsStateWithLifecycle().value
     val bottomRoutes = remember(selectedDestinations) { selectedDestinations.map { it.toRoute() } }
     val currentDestination = navController.currentBackStackEntryAsState().value?.destination
     val compactScreen = isCompactScreen()
     val wideScreen = isWideScreen()
+    val compactHeight = isCompactHeight()
     val showPrimaryNavigation = currentDestination?.route == Route.Dashboard.value ||
         currentDestination?.route in bottomRoutes.map { it.value }
-    val showFloatingNavigation = showPrimaryNavigation && compactScreen
+    val showSideRail = showPrimaryNavigation && wideScreen && !compactHeight
+    val showFloatingNavigation = showPrimaryNavigation && (compactScreen || compactHeight)
+    val useFullBleedContent = currentDestination?.route in setOf(
+        Route.LabelScan.value,
+        Route.BarcodeScan.value
+    )
     var showQuickActions by rememberSaveable { mutableStateOf(false) }
 
     if (showQuickActions) {
@@ -166,16 +195,30 @@ fun FitNsApp() {
         )
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f),
+                        MaterialTheme.colorScheme.background
+                    )
+                )
+            )
+    ) {
+        OceanBubbleBackdrop(Modifier.fillMaxSize())
+        Scaffold(
+            containerColor = Color.Transparent
+        ) { padding ->
+            Box(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
+                    .padding(if (useFullBleedContent) PaddingValues(0.dp) else padding)
             ) {
-                if (showPrimaryNavigation && wideScreen) {
+                if (showSideRail) {
                     SideRail(
                         currentDestination = currentDestination,
                         bottomRoutes = bottomRoutes,
@@ -215,7 +258,6 @@ fun FitNsApp() {
                         onAddFood = { navController.navigate(Route.AddFood.value) },
                         onStartWorkout = { navController.navigate(Route.Workout.value) },
                         onAddWater = viewModel::addWater,
-                        onRemoveWater = viewModel::removeWater,
                         onOpenSettings = { navController.navigate(Route.Settings.value) }
                     )
                 }
@@ -253,6 +295,11 @@ fun FitNsApp() {
                     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
                     ManualFoodScreen(
                         barcodeLookup = uiState.barcodeLookup,
+                        foodSearch = uiState.foodSearch,
+                        onFoodSearchQueryChange = viewModel::updateFoodSearchQuery,
+                        onSelectRecentFood = viewModel::selectRecentFood,
+                        onSelectFavoriteFood = viewModel::selectFavoriteFood,
+                        onSelectCustomFood = viewModel::selectCustomFood,
                         onBarcodeChange = viewModel::updateBarcode,
                         onLookupBarcode = viewModel::lookupBarcode,
                         onPrefillConsumed = viewModel::clearBarcodePrefill,
@@ -261,7 +308,7 @@ fun FitNsApp() {
                         onScanMeal = { navController.navigate(Route.MealAnalysis.value) },
                         onSave = { input ->
                             viewModel.addFood(input) {
-                                navController.popBackStack()
+                                navController.popBackStack(Route.AddFood.value, inclusive = true)
                             }
                         },
                         onCancel = { navController.popBackStack() }
@@ -290,7 +337,14 @@ fun FitNsApp() {
                     )
                 }
                 composable(Route.MealAnalysis.value) {
-                    MealAnalysisScreen(onClose = { navController.popBackStack() })
+                    MealAnalysisScreen(
+                        onClose = { navController.popBackStack() },
+                        onSaved = { navigateAfterMealSaved(navController) },
+                        onAddManually = { navigateFromMealAnalysisToAddFood(navController) },
+                        onOpenPrivacySettings = {
+                            navController.navigate(Route.PrivacySettings.value) { launchSingleTop = true }
+                        }
+                    )
                 }
                 composable(Route.Workout.value) {
                     val viewModel: WorkoutViewModel = hiltViewModel()
@@ -510,6 +564,100 @@ fun FitNsApp() {
                         .fillMaxWidth()
                 )
             }
+            GlobalUndoRedoBar(
+                state = undoRedoState,
+                onUndo = undoRedoViewModel::undo,
+                onRedo = undoRedoViewModel::redo,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(
+                        end = 18.dp,
+                        bottom = if (showFloatingNavigation) 128.dp else 18.dp
+                    )
+            )
+        }
+    }
+    }
+}
+
+@Composable
+private fun GlobalUndoRedoBar(
+    state: UndoRedoState,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (!state.canUndo && !state.canRedo) return
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        contentColor = MaterialTheme.colorScheme.primary,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onUndo,
+                enabled = state.canUndo && !state.busy
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Undo,
+                    contentDescription = state.undoLabel?.let { "Undo $it" } ?: "Undo"
+                )
+            }
+            IconButton(
+                onClick = onRedo,
+                enabled = state.canRedo && !state.busy
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Redo,
+                    contentDescription = state.redoLabel?.let { "Redo $it" } ?: "Redo"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun OceanBubbleBackdrop(modifier: Modifier = Modifier) {
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    Canvas(modifier = modifier) {
+        val shortSide = size.minDimension
+        drawCircle(
+            color = primary.copy(alpha = 0.055f),
+            radius = shortSide * 0.42f,
+            center = Offset(size.width * 0.93f, size.height * 0.12f)
+        )
+        drawCircle(
+            color = secondary.copy(alpha = 0.045f),
+            radius = shortSide * 0.31f,
+            center = Offset(size.width * 0.06f, size.height * 0.72f)
+        )
+        drawArc(
+            color = primary.copy(alpha = 0.08f),
+            startAngle = 198f,
+            sweepAngle = 118f,
+            useCenter = false,
+            topLeft = Offset(-shortSide * 0.42f, size.height * 0.44f),
+            size = androidx.compose.ui.geometry.Size(shortSide * 1.45f, shortSide * 0.72f),
+            style = Stroke(width = 2.dp.toPx())
+        )
+        listOf(
+            Triple(0.87f, 0.32f, 5f),
+            Triple(0.91f, 0.27f, 3f),
+            Triple(0.12f, 0.18f, 4f),
+            Triple(0.16f, 0.14f, 2.5f)
+        ).forEach { (x, y, radius) ->
+            drawCircle(
+                color = primary.copy(alpha = 0.12f),
+                radius = radius.dp.toPx(),
+                center = Offset(size.width * x, size.height * y)
+            )
         }
     }
 }
@@ -538,8 +686,8 @@ private fun PillNavigationBar(
     Box(
         modifier
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 16.dp)
+            .padding(horizontal = 12.dp)
+            .padding(bottom = 10.dp)
             .clickable(
                 interactionSource = touchShield,
                 indication = null,
@@ -547,30 +695,29 @@ private fun PillNavigationBar(
             )
     ) {
         Surface(
-            shape = RoundedCornerShape(38.dp),
-            color = MaterialTheme.colorScheme.surfaceContainer,
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
             tonalElevation = 0.dp,
-            shadowElevation = 20.dp,
+            shadowElevation = 16.dp,
             border = BorderStroke(
                 width = 1.dp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
             )
         ) {
             Box(
                 modifier = Modifier.background(
                     brush = Brush.verticalGradient(
                         listOf(
-                            Color.White.copy(alpha = 0.16f),
-                            Color.Transparent,
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f),
+                            Color.Transparent
                         )
                     )
                 )
             ) {
                 NavigationBar(
                     modifier = Modifier
-                        .height(68.dp)
-                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                        .height(72.dp)
+                        .padding(horizontal = 4.dp, vertical = 3.dp),
                     containerColor = Color.Transparent,
                     tonalElevation = 0.dp,
                     windowInsets = WindowInsets(0, 0, 0, 0)
@@ -590,10 +737,21 @@ private fun PillNavigationBar(
                                     contentDescription = route.label
                                 )
                             },
+                            label = {
+                                Text(
+                                    text = route.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1
+                                )
+                            },
+                            alwaysShowLabel = false,
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.primary,
                                 unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer
                             )
                         )
                     }
@@ -606,13 +764,51 @@ private fun PillNavigationBar(
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun QuickActionsSheet(onDismiss: () -> Unit, onNavigate: (String) -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Text(
-            "Quick access",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-        )
-        LazyColumn(Modifier.fillMaxWidth()) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(62.dp)
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.whale_coach),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.padding(5.dp)
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "Your next move",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Black
+                )
+                Text(
+                    "Keep the momentum flowing.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 760.dp)
+                .align(Alignment.CenterHorizontally)
+        ) {
             item { QuickAccessSectionTitle("Log") }
             items(QuickLogItems, key = { it.route.value }) { item ->
                 QuickAccessRow(item, onNavigate)
@@ -632,7 +828,7 @@ private fun QuickAccessSectionTitle(title: String) {
         title,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp)
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
     )
 }
 
@@ -641,15 +837,30 @@ private fun QuickAccessRow(item: QuickAccessItem, onNavigate: (String) -> Unit) 
     Surface(
         onClick = { onNavigate(item.route.value) },
         color = Color.Transparent,
-        modifier = Modifier.fillMaxWidth()
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 1.dp)
     ) {
         ListItem(
             headlineContent = { Text(item.title) },
             supportingContent = { Text(item.subtitle) },
-            leadingContent = { Icon(item.route.icon, contentDescription = null) }
+            leadingContent = {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        item.route.icon,
+                        contentDescription = null,
+                        modifier = Modifier.padding(10.dp).size(22.dp)
+                    )
+                }
+            },
+            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent)
         )
     }
-    HorizontalDivider(Modifier.padding(horizontal = 24.dp))
 }
 
 @Composable
@@ -660,24 +871,32 @@ private fun SideRail(
     onQuickAction: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(26.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 3.dp,
-        shadowElevation = 8.dp,
+        shape = RoundedCornerShape(30.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        tonalElevation = 0.dp,
+        shadowElevation = 12.dp,
         modifier = Modifier
             .fillMaxHeight()
-            .padding(start = 14.dp, top = 12.dp, bottom = 12.dp)
+            .padding(start = 12.dp, top = 10.dp, bottom = 10.dp)
     ) {
         NavigationRail(
             modifier = Modifier.padding(8.dp),
             containerColor = Color.Transparent,
             header = {
-                Icon(
-                    imageVector = Icons.Filled.Home,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
-                )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier
+                        .padding(top = 2.dp, bottom = 8.dp)
+                        .size(52.dp)
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.whale_coach),
+                        contentDescription = "FitNS whale coach",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.padding(4.dp).clip(CircleShape)
+                    )
+                }
             }
         ) {
             bottomRoutes.forEach { route ->
@@ -713,7 +932,40 @@ private fun navigateFromQuickAccess(navController: NavHostController, route: Str
     if (route == Route.LabelScan.value || route == Route.BarcodeScan.value) {
         navController.navigate(Route.AddFood.value) { launchSingleTop = true }
     }
-    navController.navigate(route) { launchSingleTop = true }
+    if (route in QuickTopLevelRoutes) {
+        navigateToTab(navController, route)
+    } else {
+        navController.navigate(route) { launchSingleTop = true }
+    }
+}
+
+private val QuickTopLevelRoutes = setOf(
+    Route.Dashboard.value,
+    Route.Nutrition.value,
+    Route.Workout.value,
+    Route.BodyWeight.value,
+    Route.Progress.value,
+    Route.Recommendations.value,
+    Route.Profile.value,
+    Route.Settings.value
+)
+
+private fun navigateAfterMealSaved(navController: NavHostController) {
+    if (navController.popBackStack(Route.Nutrition.value, inclusive = false)) return
+
+    navController.navigate(Route.Nutrition.value) {
+        launchSingleTop = true
+        popUpTo(Route.Dashboard.value)
+    }
+}
+
+private fun navigateFromMealAnalysisToAddFood(navController: NavHostController) {
+    if (navController.popBackStack(Route.AddFood.value, inclusive = false)) return
+
+    navController.navigate(Route.AddFood.value) {
+        launchSingleTop = true
+        popUpTo(Route.MealAnalysis.value) { inclusive = true }
+    }
 }
 
 private data class QuickAccessItem(

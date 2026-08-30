@@ -4,6 +4,8 @@ import com.raysix.fitns.core.model.AppError
 import com.raysix.fitns.core.model.AppResult
 import com.raysix.fitns.core.sync.SyncPayloadFactory
 import com.raysix.fitns.core.sync.SyncQueueWriter
+import com.raysix.fitns.core.undo.AppUndoRedoManager
+import com.raysix.fitns.core.undo.UndoRedoAction
 import com.raysix.fitns.data.local.dao.WorkoutDao
 import com.raysix.fitns.data.local.entity.ExerciseEntity
 import com.raysix.fitns.data.local.entity.SyncStatus
@@ -19,6 +21,7 @@ import com.raysix.fitns.domain.model.WorkoutSetType
 import com.raysix.fitns.domain.repository.WorkoutRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import java.util.UUID
 import javax.inject.Inject
 import com.raysix.fitns.data.local.FitNsDatabase
@@ -28,7 +31,8 @@ class LocalWorkoutRepository @Inject constructor(
     private val workoutDao: WorkoutDao,
     private val database: FitNsDatabase,
     private val syncQueueWriter: SyncQueueWriter,
-    private val syncPayloadFactory: SyncPayloadFactory
+    private val syncPayloadFactory: SyncPayloadFactory,
+    private val undoRedoManager: AppUndoRedoManager
 ) : WorkoutRepository {
     override fun observeExercises(): Flow<List<Exercise>> {
         return combine(
@@ -129,6 +133,11 @@ class LocalWorkoutRepository @Inject constructor(
         val error = validate(exercise)
         if (error != null) return AppResult.Failure(error)
         workoutDao.upsertExercise(exercise.toEntity())
+        recordUndo(
+            label = "exercise",
+            undo = { workoutDao.softDeleteExercise(exercise.id, System.currentTimeMillis()) },
+            redo = { addExercise(exercise) }
+        )
         return AppResult.Success(Unit)
     }
 
@@ -163,6 +172,11 @@ class LocalWorkoutRepository @Inject constructor(
             )
         }
         syncQueueWriter.schedule()
+        recordUndo(
+            label = "workout",
+            undo = { deleteWorkout(syncEntry) },
+            redo = { addWorkoutExact(syncEntry) }
+        )
         return AppResult.Success(Unit)
     }
 
@@ -222,12 +236,36 @@ class LocalWorkoutRepository @Inject constructor(
             )
         }
         syncQueueWriter.schedule()
+        val undoEntry = completedExercises.first().let { (exercise, completedSets) ->
+            WorkoutLogEntry(
+                id = session.id,
+                exercise = exercise.exercise,
+                sets = completedSets.map {
+                    WorkoutSetInput(
+                        weightKg = it.weightKg,
+                        repetitions = it.repetitions,
+                        rpe = it.rpe,
+                        rir = it.rir,
+                        setType = it.setType,
+                        completedAt = it.completedAt,
+                        restSeconds = it.restSeconds
+                    )
+                },
+                loggedAt = session.startedAt
+            )
+        }
+        recordUndo(
+            label = "workout session",
+            undo = { deleteWorkout(undoEntry) },
+            redo = { saveWorkoutSession(session) }
+        )
         return AppResult.Success(Unit)
     }
 
     override suspend fun saveWorkoutPlan(plan: WorkoutPlan): AppResult<Unit> {
         val error = validate(plan)
         if (error != null) return AppResult.Failure(error)
+        val previous = observeWorkoutPlans().first().firstOrNull { it.id == plan.id }
 
         val now = System.currentTimeMillis()
         workoutDao.upsertWorkoutPlanWithExercises(
@@ -236,6 +274,17 @@ class LocalWorkoutRepository @Inject constructor(
                 exercise.toEntity(plan.id, index, now)
             }
         )
+        recordUndo(
+            label = "workout plan",
+            undo = {
+                if (previous == null) {
+                    deleteWorkoutPlan(plan)
+                } else {
+                    saveWorkoutPlan(previous)
+                }
+            },
+            redo = { saveWorkoutPlan(plan) }
+        )
         return AppResult.Success(Unit)
     }
 
@@ -243,6 +292,11 @@ class LocalWorkoutRepository @Inject constructor(
         workoutDao.softDeleteWorkoutPlanCascade(
             planId = plan.id,
             deletedAt = System.currentTimeMillis()
+        )
+        recordUndo(
+            label = "workout plan delete",
+            undo = { saveWorkoutPlan(plan) },
+            redo = { deleteWorkoutPlan(plan) }
         )
         return AppResult.Success(Unit)
     }
@@ -264,7 +318,48 @@ class LocalWorkoutRepository @Inject constructor(
             )
         }
         syncQueueWriter.schedule()
+        recordUndo(
+            label = "workout delete",
+            undo = { addWorkoutExact(entry) },
+            redo = { deleteWorkout(entry) }
+        )
         return AppResult.Success(Unit)
+    }
+
+    private suspend fun addWorkoutExact(entry: WorkoutLogEntry): AppResult<Unit> {
+        val invalidSet = entry.sets.firstNotNullOfOrNull { validate(it) }
+        if (invalidSet != null) return AppResult.Failure(invalidSet)
+        val workoutExerciseId = "${entry.id}-${entry.exercise.id}"
+        database.withTransaction {
+            workoutDao.addWorkoutSession(
+                exercises = listOf(entry.exercise.toEntity(entry.loggedAt)),
+                workout = newWorkoutEntity(entry.id, entry.loggedAt, entry.loggedAt),
+                workoutExercises = listOf(
+                    newWorkoutExerciseEntity(
+                        id = workoutExerciseId,
+                        workoutId = entry.id,
+                        exerciseId = entry.exercise.id,
+                        notes = entry.notes,
+                        now = entry.loggedAt
+                    )
+                ),
+                sets = entry.sets.mapIndexed { index, set ->
+                    set.toEntity(workoutExerciseId, entry.loggedAt + index)
+                }
+            )
+            syncQueueWriter.enqueueOnly(
+                entityType = EntityTypeWorkout,
+                entityId = entry.id,
+                operation = OperationUpsert,
+                payloadJson = syncPayloadFactory.workout(entry, OperationUpsert)
+            )
+        }
+        syncQueueWriter.schedule()
+        return AppResult.Success(Unit)
+    }
+
+    private fun recordUndo(label: String, undo: suspend () -> Unit, redo: suspend () -> Unit) {
+        undoRedoManager.record(UndoRedoAction(label = label, undo = undo, redo = redo))
     }
 
     private fun validate(set: WorkoutSetInput): AppError? {

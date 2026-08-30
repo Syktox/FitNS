@@ -1,21 +1,48 @@
 package com.raysix.fitns.feature.nutrition
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.DocumentScanner
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,22 +50,46 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.raysix.fitns.core.design.AdaptiveGutterLayout
+import com.raysix.fitns.R
 import com.raysix.fitns.core.design.ModernCard
-import com.raysix.fitns.core.design.ScreenHeader
 import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.input.toUserDecimalOrNull
+import com.raysix.fitns.domain.model.CustomFood
 import com.raysix.fitns.domain.model.DataQuality
+import com.raysix.fitns.domain.model.FoodFavoritePreset
+import com.raysix.fitns.domain.model.FoodLogEntry
+import com.raysix.fitns.domain.model.FoodSearchSections
 import com.raysix.fitns.domain.model.MealType
 import com.raysix.fitns.domain.model.Micronutrients
+import com.raysix.fitns.domain.model.MicronutrientValue
+import com.raysix.fitns.domain.model.NutrientKey
+import java.net.URLDecoder
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+import kotlin.math.round
+import kotlin.math.roundToInt
 
 data class ManualFoodInput(
     val name: String,
@@ -59,10 +110,17 @@ data class ManualFoodInput(
     val dataQuality: DataQuality = DataQuality.Verified
 )
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+private enum class AddFoodStage { Choose, Edit }
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManualFoodScreen(
     barcodeLookup: BarcodeLookupUiState,
+    foodSearch: FoodSearchSections,
+    onFoodSearchQueryChange: (String) -> Unit,
+    onSelectRecentFood: (FoodLogEntry) -> Unit,
+    onSelectFavoriteFood: (FoodFavoritePreset) -> Unit,
+    onSelectCustomFood: (CustomFood) -> Unit,
     onBarcodeChange: (String) -> Unit,
     onLookupBarcode: () -> Unit,
     onPrefillConsumed: () -> Unit,
@@ -72,9 +130,11 @@ fun ManualFoodScreen(
     onSave: (ManualFoodInput) -> Unit,
     onCancel: () -> Unit
 ) {
+    var stageName by rememberSaveable { mutableStateOf(AddFoodStage.Choose.name) }
+    val stage = AddFoodStage.entries.firstOrNull { it.name == stageName } ?: AddFoodStage.Choose
     var name by rememberSaveable { mutableStateOf("") }
     var brand by rememberSaveable { mutableStateOf("") }
-    var grams by rememberSaveable { mutableStateOf("100") }
+    var grams by rememberSaveable { mutableStateOf("") }
     var calories by rememberSaveable { mutableStateOf("") }
     var protein by rememberSaveable { mutableStateOf("") }
     var carbs by rememberSaveable { mutableStateOf("") }
@@ -85,14 +145,100 @@ fun ManualFoodScreen(
     var salt by rememberSaveable { mutableStateOf("") }
     var sodium by rememberSaveable { mutableStateOf("") }
     var notes by rememberSaveable { mutableStateOf("") }
-    var mealTypeName by rememberSaveable { mutableStateOf(MealType.Snack.name) }
-    val mealType = MealType.entries.firstOrNull { it.name == mealTypeName } ?: MealType.Snack
+    var showMealPicker by rememberSaveable { mutableStateOf(false) }
+    var selectedMealTypeName by rememberSaveable { mutableStateOf<String?>(null) }
+    var showNutritionDetails by rememberSaveable { mutableStateOf(false) }
+    var showNotes by rememberSaveable { mutableStateOf(false) }
+    var autoScaleNutrition by rememberSaveable { mutableStateOf(false) }
+    var micronutrients by rememberSaveable(stateSaver = MicronutrientsSaver) {
+        mutableStateOf(Micronutrients())
+    }
+    var dataQualityName by rememberSaveable { mutableStateOf(DataQuality.Verified.name) }
+    var baselineGrams by rememberSaveable { mutableStateOf("") }
+    var baselineCalories by rememberSaveable { mutableStateOf("") }
+    var baselineProtein by rememberSaveable { mutableStateOf("") }
+    var baselineCarbs by rememberSaveable { mutableStateOf("") }
+    var baselineSugar by rememberSaveable { mutableStateOf("") }
+    var baselineFat by rememberSaveable { mutableStateOf("") }
+    var baselineSaturatedFat by rememberSaveable { mutableStateOf("") }
+    var baselineFiber by rememberSaveable { mutableStateOf("") }
+    var baselineSalt by rememberSaveable { mutableStateOf("") }
+    var baselineSodium by rememberSaveable { mutableStateOf("") }
+    var baselineMicronutrients by rememberSaveable(stateSaver = MicronutrientsSaver) {
+        mutableStateOf(Micronutrients())
+    }
+
+    val selectedMealType = selectedMealTypeName?.let { selectedName ->
+        MealType.entries.firstOrNull { it.name == selectedName }
+    }
+    val dataQuality = DataQuality.entries.firstOrNull { it.name == dataQualityName } ?: DataQuality.Verified
     val gramsValue = grams.toUserDecimalOrNull()
-    val optionalNutritionValues = listOf(calories, protein, carbs, sugar, fat, saturatedFat, fiber, salt, sodium)
-    val nutritionValuesAreValid = optionalNutritionValues.all { value ->
+    val numericValues = listOf(calories, protein, carbs, sugar, fat, saturatedFat, fiber, salt, sodium)
+    val nutritionValuesAreValid = numericValues.all { value ->
         value.isBlank() || value.toUserDecimalOrNull()?.let { it >= 0.0 } == true
     }
-    val canSave = name.isNotBlank() && gramsValue?.let { it > 0.0 } == true && nutritionValuesAreValid
+    val interactionLocked = barcodeLookup.loading || barcodeLookup.savingFood
+    val canSave = name.isNotBlank() && gramsValue?.let { it > 0.0 } == true && nutritionValuesAreValid &&
+        !interactionLocked
+    val calorieValue = calories.toUserDecimalOrNull() ?: 0.0
+    val proteinValue = protein.toUserDecimalOrNull() ?: 0.0
+    val carbsValue = carbs.toUserDecimalOrNull() ?: 0.0
+    val fatValue = fat.toUserDecimalOrNull() ?: 0.0
+
+    fun setPortion(value: String, rescale: Boolean) {
+        if (rescale && autoScaleNutrition) {
+            val sourceGrams = baselineGrams.toUserDecimalOrNull()
+            val next = value.toUserDecimalOrNull()
+            if (sourceGrams != null && sourceGrams > 0.0 && next != null && next > 0.0) {
+                val factor = next / sourceGrams
+                calories = baselineCalories.scaledBy(factor)
+                protein = baselineProtein.scaledBy(factor)
+                carbs = baselineCarbs.scaledBy(factor)
+                sugar = baselineSugar.scaledBy(factor)
+                fat = baselineFat.scaledBy(factor)
+                saturatedFat = baselineSaturatedFat.scaledBy(factor)
+                fiber = baselineFiber.scaledBy(factor)
+                salt = baselineSalt.scaledBy(factor)
+                sodium = baselineSodium.scaledBy(factor)
+                micronutrients = baselineMicronutrients.scaledBy(factor)
+            }
+        }
+        grams = value
+    }
+
+    fun resetDraft() {
+        name = ""
+        brand = ""
+        grams = ""
+        calories = ""
+        protein = ""
+        carbs = ""
+        sugar = ""
+        fat = ""
+        saturatedFat = ""
+        fiber = ""
+        salt = ""
+        sodium = ""
+        notes = ""
+        showMealPicker = false
+        selectedMealTypeName = null
+        showNutritionDetails = false
+        showNotes = false
+        autoScaleNutrition = false
+        micronutrients = Micronutrients()
+        dataQualityName = DataQuality.Verified.name
+        baselineGrams = ""
+        baselineCalories = ""
+        baselineProtein = ""
+        baselineCarbs = ""
+        baselineSugar = ""
+        baselineFat = ""
+        baselineSaturatedFat = ""
+        baselineFiber = ""
+        baselineSalt = ""
+        baselineSodium = ""
+        baselineMicronutrients = Micronutrients()
+    }
 
     LaunchedEffect(barcodeLookup.prefillInput) {
         barcodeLookup.prefillInput?.let { input ->
@@ -109,238 +255,961 @@ fun ManualFoodScreen(
             salt = input.salt.formatPlain()
             sodium = input.sodiumMilligrams?.formatPlain().orEmpty()
             notes = input.notes
-            mealTypeName = input.mealType.name
+            showMealPicker = false
+            selectedMealTypeName = null
+            micronutrients = input.micronutrients
+            dataQualityName = input.dataQuality.name
+            baselineGrams = input.grams.formatPlain()
+            baselineCalories = input.calories.formatPlain()
+            baselineProtein = input.protein.formatPlain()
+            baselineCarbs = input.carbohydrates.formatPlain()
+            baselineSugar = input.sugar.formatPlain()
+            baselineFat = input.fat.formatPlain()
+            baselineSaturatedFat = input.saturatedFat.formatPlain()
+            baselineFiber = input.fiber.formatPlain()
+            baselineSalt = input.salt.formatPlain()
+            baselineSodium = input.sodiumMilligrams?.formatPlain().orEmpty()
+            baselineMicronutrients = input.micronutrients
+            showNutritionDetails = listOf(input.sugar, input.saturatedFat, input.fiber, input.salt)
+                .any { it > 0.0 } || input.sodiumMilligrams != null
+            showNotes = input.notes.isNotBlank()
+            autoScaleNutrition = true
+            stageName = AddFoodStage.Edit.name
             onPrefillConsumed()
         }
     }
 
-    AdaptiveGutterLayout(
-        header = {
-            ScreenHeader(
-                title = "Add Food",
-                subtitle = "Scan, photograph, or enter details for a food. Review every detail before saving.",
-                actions = { TextButton(onClick = onCancel) { Text("Close") } }
-            )
-        },
-        gutterWidthFraction = 0.4f,
-        gutter = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                ScanMealCard(onScanMeal = onScanMeal)
-                BarcodeLookupCard(
-                    state = barcodeLookup,
-                    onBarcodeChange = onBarcodeChange,
-                    onLookup = onLookupBarcode,
-                    onScanBarcode = onScanBarcode
+    BackHandler(enabled = stage == AddFoodStage.Edit) {
+        if (!barcodeLookup.savingFood) stageName = AddFoodStage.Choose.name
+    }
+
+    if (showMealPicker) {
+        MealDestinationDialog(
+            selected = selectedMealType,
+            onSelected = { selectedMealTypeName = it.name },
+            onDismiss = {
+                showMealPicker = false
+                selectedMealTypeName = null
+            },
+            onConfirm = { confirmedMealType ->
+                showMealPicker = false
+                selectedMealTypeName = null
+                onSave(
+                    ManualFoodInput(
+                        name = name.trim(),
+                        brand = brand.trim().ifBlank { null },
+                        grams = gramsValue ?: 0.0,
+                        calories = calorieValue,
+                        protein = proteinValue,
+                        carbohydrates = carbsValue,
+                        sugar = sugar.toUserDecimalOrNull() ?: 0.0,
+                        fat = fatValue,
+                        saturatedFat = saturatedFat.toUserDecimalOrNull() ?: 0.0,
+                        fiber = fiber.toUserDecimalOrNull() ?: 0.0,
+                        salt = salt.toUserDecimalOrNull() ?: 0.0,
+                        sodiumMilligrams = sodium.toUserDecimalOrNull(),
+                        mealType = confirmedMealType,
+                        notes = notes.trim(),
+                        micronutrients = micronutrients,
+                        dataQuality = dataQuality
+                    )
                 )
-                SectionCard(title = "Nutrition label", subtitle = "Photograph the nutrition table to fill in the values. OCR results are a draft and must be reviewed.") {
-                    OutlinedButton(
-                        onClick = onScanLabel,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(999.dp)
-                    ) {
-                        Text("Scan nutrition label")
-                    }
+            },
+            title = "Add to which meal?",
+            description = "Choose where the meal should appear in today's diary.",
+            confirmLabel = "Add food"
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f),
+                        MaterialTheme.colorScheme.background
+                    )
+                )
+            )
+    ) {
+        FoodLoggingTopBar(
+            title = if (stage == AddFoodStage.Choose) "Add food" else "Review food",
+            subtitle = if (stage == AddFoodStage.Choose) {
+                "Search, scan, or create an entry"
+            } else {
+                "Everything stays editable before you log it"
+            },
+            onBack = {
+                if (!barcodeLookup.savingFood) {
+                    if (stage == AddFoodStage.Edit) stageName = AddFoodStage.Choose.name else onCancel()
                 }
+            },
+            onClose = if (stage == AddFoodStage.Edit) {
+                { if (!barcodeLookup.savingFood) onCancel() }
+            } else {
+                null
             }
-        },
-        main = {
-            SectionCard(title = "Product") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = brand, onValueChange = { brand = it }, label = { Text("Brand") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
-                    NumericField(value = grams, onValueChange = { grams = it }, label = "Amount in grams")
-                    PortionPresetChips(
-                        currentGrams = grams,
-                        onSelectGrams = { grams = it }
+        )
+
+        if (stage == AddFoodStage.Choose) {
+            ChooseFoodStage(
+                foodSearch = foodSearch,
+                barcodeLookup = barcodeLookup,
+                onFoodSearchQueryChange = onFoodSearchQueryChange,
+                onSelectRecentFood = onSelectRecentFood,
+                onSelectFavoriteFood = onSelectFavoriteFood,
+                onSelectCustomFood = onSelectCustomFood,
+                onBarcodeChange = onBarcodeChange,
+                onLookupBarcode = onLookupBarcode,
+                onScanBarcode = onScanBarcode,
+                onScanLabel = onScanLabel,
+                onScanMeal = onScanMeal,
+                onManualEntry = {
+                    resetDraft()
+                    stageName = AddFoodStage.Edit.name
+                },
+                modifier = Modifier.weight(1f)
+            )
+        } else {
+            FoodEditorStage(
+                name = name,
+                onNameChange = { name = it },
+                brand = brand,
+                onBrandChange = { brand = it },
+                grams = grams,
+                onGramsChange = { setPortion(it, true) },
+                calories = calories,
+                onCaloriesChange = { calories = it; autoScaleNutrition = false },
+                protein = protein,
+                onProteinChange = { protein = it; autoScaleNutrition = false },
+                carbs = carbs,
+                onCarbsChange = { carbs = it; autoScaleNutrition = false },
+                fat = fat,
+                onFatChange = { fat = it; autoScaleNutrition = false },
+                sugar = sugar,
+                onSugarChange = { sugar = it; autoScaleNutrition = false },
+                saturatedFat = saturatedFat,
+                onSaturatedFatChange = { saturatedFat = it; autoScaleNutrition = false },
+                fiber = fiber,
+                onFiberChange = { fiber = it; autoScaleNutrition = false },
+                salt = salt,
+                onSaltChange = { salt = it; autoScaleNutrition = false },
+                sodium = sodium,
+                onSodiumChange = { sodium = it; autoScaleNutrition = false },
+                notes = notes,
+                onNotesChange = { notes = it },
+                showNutritionDetails = showNutritionDetails,
+                onToggleNutritionDetails = { showNutritionDetails = !showNutritionDetails },
+                showNotes = showNotes,
+                onToggleNotes = { showNotes = !showNotes },
+                autoScaleNutrition = autoScaleNutrition,
+                macroValues = MacroValues(calorieValue, proteinValue, carbsValue, fatValue),
+                barcodeLookup = barcodeLookup,
+                modifier = Modifier.weight(1f)
+            )
+            PersistentFoodActionBar(
+                label = "Add • ${calorieValue.coerceAtLeast(0.0).roundToIntSafe()} kcal",
+                supportingText = "${gramsValue?.formatPlain() ?: "—"} g · choose meal next",
+                enabled = canSave,
+                loading = barcodeLookup.savingFood,
+                onClick = {
+                    selectedMealTypeName = null
+                    showMealPicker = true
+                },
+                modifier = Modifier.imePadding()
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChooseFoodStage(
+    foodSearch: FoodSearchSections,
+    barcodeLookup: BarcodeLookupUiState,
+    onFoodSearchQueryChange: (String) -> Unit,
+    onSelectRecentFood: (FoodLogEntry) -> Unit,
+    onSelectFavoriteFood: (FoodFavoritePreset) -> Unit,
+    onSelectCustomFood: (CustomFood) -> Unit,
+    onBarcodeChange: (String) -> Unit,
+    onLookupBarcode: () -> Unit,
+    onScanBarcode: () -> Unit,
+    onScanLabel: () -> Unit,
+    onScanMeal: () -> Unit,
+    onManualEntry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val wide = maxWidth >= 700.dp
+        if (wide) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                ScrollPane(modifier = Modifier.weight(0.46f).fillMaxHeight()) {
+                    CaptureAndCreatePanel(
+                        barcodeLookup = barcodeLookup,
+                        onBarcodeChange = onBarcodeChange,
+                        onLookupBarcode = onLookupBarcode,
+                        onScanBarcode = onScanBarcode,
+                        onScanLabel = onScanLabel,
+                        onScanMeal = onScanMeal,
+                        onManualEntry = onManualEntry
+                    )
+                }
+                ScrollPane(modifier = Modifier.weight(0.54f).fillMaxHeight()) {
+                    FoodLibraryPanel(
+                        foodSearch = foodSearch,
+                        onQueryChange = onFoodSearchQueryChange,
+                        onSelectRecentFood = onSelectRecentFood,
+                        onSelectFavoriteFood = onSelectFavoriteFood,
+                        onSelectCustomFood = onSelectCustomFood
                     )
                 }
             }
-            SectionCard(title = "Nutrition per serving") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    NumericField(value = calories, onValueChange = { calories = it }, label = "Calories")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumericField(value = protein, onValueChange = { protein = it }, label = "Protein g", modifier = Modifier.weight(1f))
-                        NumericField(value = carbs, onValueChange = { carbs = it }, label = "Carbs g", modifier = Modifier.weight(1f))
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumericField(value = fat, onValueChange = { fat = it }, label = "Fat g", modifier = Modifier.weight(1f))
-                        NumericField(value = sugar, onValueChange = { sugar = it }, label = "Sugar g", modifier = Modifier.weight(1f))
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumericField(value = saturatedFat, onValueChange = { saturatedFat = it }, label = "Saturated fat g", modifier = Modifier.weight(1f))
-                        NumericField(value = fiber, onValueChange = { fiber = it }, label = "Fiber g", modifier = Modifier.weight(1f))
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        NumericField(value = salt, onValueChange = { salt = it }, label = "Salt g", modifier = Modifier.weight(1f))
-                        NumericField(value = sodium, onValueChange = { sodium = it }, label = "Sodium mg", modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-            SectionCard(title = "Meal") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(MealType.Breakfast, MealType.Lunch, MealType.Dinner, MealType.Snack).forEach { type ->
-                            FilterChip(
-                                selected = mealType == type,
-                                onClick = { mealTypeName = type.name },
-                                label = { Text(type.name) }
-                            )
-                        }
-                    }
-                    OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Surface(
-                    onClick = {
-                        onSave(
-                            ManualFoodInput(
-                                name = name,
-                                brand = brand.ifBlank { null },
-                                grams = grams.toUserDecimalOrNull() ?: 0.0,
-                                calories = calories.toUserDecimalOrNull() ?: 0.0,
-                                protein = protein.toUserDecimalOrNull() ?: 0.0,
-                                carbohydrates = carbs.toUserDecimalOrNull() ?: 0.0,
-                                sugar = sugar.toUserDecimalOrNull() ?: 0.0,
-                                fat = fat.toUserDecimalOrNull() ?: 0.0,
-                                saturatedFat = saturatedFat.toUserDecimalOrNull() ?: 0.0,
-                                fiber = fiber.toUserDecimalOrNull() ?: 0.0,
-                                salt = salt.toUserDecimalOrNull() ?: 0.0,
-                                sodiumMilligrams = sodium.toUserDecimalOrNull(),
-                                mealType = mealType,
-                                notes = notes
-                            )
-                        )
-                    },
-                    enabled = canSave,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(999.dp),
-                    color = if (canSave) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
-                    contentColor = if (canSave) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                ) {
-                    Text(
-                        "Save",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(vertical = 13.dp)
-                    )
-                }
-                OutlinedButton(
-                    onClick = onCancel,
-                    shape = RoundedCornerShape(999.dp)
-                ) {
-                    Text("Cancel")
-                }
+        } else {
+            ScrollPane(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                CaptureAndCreatePanel(
+                    barcodeLookup = barcodeLookup,
+                    onBarcodeChange = onBarcodeChange,
+                    onLookupBarcode = onLookupBarcode,
+                    onScanBarcode = onScanBarcode,
+                    onScanLabel = onScanLabel,
+                    onScanMeal = onScanMeal,
+                    onManualEntry = onManualEntry
+                )
+                FoodLibraryPanel(
+                    foodSearch = foodSearch,
+                    onQueryChange = onFoodSearchQueryChange,
+                    onSelectRecentFood = onSelectRecentFood,
+                    onSelectFavoriteFood = onSelectFavoriteFood,
+                    onSelectCustomFood = onSelectCustomFood
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun ScrollPane(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(top = 10.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        content = content
     )
 }
 
 @Composable
-private fun ScanMealCard(onScanMeal: () -> Unit) {
-    ModernCard {
+private fun CaptureAndCreatePanel(
+    barcodeLookup: BarcodeLookupUiState,
+    onBarcodeChange: (String) -> Unit,
+    onLookupBarcode: () -> Unit,
+    onScanBarcode: () -> Unit,
+    onScanLabel: () -> Unit,
+    onScanMeal: () -> Unit,
+    onManualEntry: () -> Unit
+) {
+    MealScanHero(onClick = onScanMeal)
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        CaptureMethodTile(
+            title = "Barcode",
+            subtitle = "Point, scan, review",
+            icon = Icons.Outlined.QrCodeScanner,
+            onClick = onScanBarcode,
+            modifier = Modifier.weight(1f).testTag("scan_barcode_method")
+        )
+        CaptureMethodTile(
+            title = "Food label",
+            subtitle = "Read nutrition values",
+            icon = Icons.Outlined.DocumentScanner,
+            onClick = onScanLabel,
+            modifier = Modifier.weight(1f).testTag("scan_label_method")
+        )
+    }
+    CaptureMethodTile(
+        title = "Create manually",
+        subtitle = "Build an entry with full control over portions and nutrition",
+        icon = Icons.Filled.EditNote,
+        onClick = onManualEntry,
+        modifier = Modifier.fillMaxWidth().testTag("manual_food_method")
+    )
+    BarcodeEntryCard(
+        state = barcodeLookup,
+        onBarcodeChange = onBarcodeChange,
+        onLookup = onLookupBarcode
+    )
+}
+
+@Composable
+private fun MealScanHero(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(28.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 190.dp)
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.tertiary
+                    )
+                )
+            )
+            .semantics { role = Role.Button }
+            .clickable(onClick = onClick)
+            .testTag("scan_meal_method")
+    ) {
+        Image(
+            painter = painterResource(R.drawable.whale_coach),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 6.dp, bottom = 2.dp)
+                .size(150.dp)
+                .alpha(0.28f)
+        )
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            modifier = Modifier.fillMaxWidth(0.82f).padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                imageVector = Icons.Filled.CameraAlt,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f),
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ) {
+                Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.padding(10.dp).size(24.dp))
+            }
+            Text(
+                "WHALE-SMART MEAL SCAN",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f)
             )
             Text(
-                text = "Scan a meal",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+                "One photo. A complete meal.",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimary
             )
             Text(
-                text = "Photograph your plate and get estimated macros for each item, powered by your n8n instance.",
+                "Capture your plate, review every detected food, then log it together.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.86f)
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Scan meal", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BarcodeEntryCard(
+    state: BarcodeLookupUiState,
+    onBarcodeChange: (String) -> Unit,
+    onLookup: () -> Unit
+) {
+    ModernCard(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Text("Have the number?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Enter a barcode without opening the camera.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        OutlinedTextField(
+            value = state.barcode,
+            onValueChange = onBarcodeChange,
+            label = { Text("Barcode number") },
+            leadingIcon = { Icon(Icons.Outlined.QrCodeScanner, contentDescription = null) },
+            trailingIcon = {
+                if (state.loading) {
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                } else {
+                    IconButton(onClick = onLookup, enabled = state.barcode.isNotBlank()) {
+                        Icon(Icons.Filled.Search, contentDescription = "Look up barcode")
+                    }
+                }
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onLookup() }),
+            singleLine = true,
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier.fillMaxWidth().testTag("barcode_input")
+        )
+        state.statusMessage?.let { message ->
+            InlineStatus(message = message, kind = state.status.toInlineStatusKind())
+        }
+    }
+}
+
+@Composable
+private fun FoodLibraryPanel(
+    foodSearch: FoodSearchSections,
+    onQueryChange: (String) -> Unit,
+    onSelectRecentFood: (FoodLogEntry) -> Unit,
+    onSelectFavoriteFood: (FoodFavoritePreset) -> Unit,
+    onSelectCustomFood: (CustomFood) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Your food library", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "Reuse something you already logged, then adjust the portion.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Surface(
-                onClick = onScanMeal,
-                shape = RoundedCornerShape(999.dp),
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+        }
+        OutlinedTextField(
+            value = foodSearch.query,
+            onValueChange = onQueryChange,
+            placeholder = { Text("Search recent, favorites, custom foods") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            singleLine = true,
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth().testTag("food_library_search")
+        )
+
+        val queryActive = foodSearch.query.isNotBlank()
+        val recent = if (queryActive) foodSearch.recent + foodSearch.searchResults else foodSearch.recent.take(5)
+        val favorites = if (queryActive) foodSearch.favorites else foodSearch.favorites.take(4)
+        val custom = if (queryActive) foodSearch.customFoods else foodSearch.customFoods.take(4)
+        if (recent.isEmpty() && favorites.isEmpty() && custom.isEmpty()) {
+            ModernCard(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+                Icon(Icons.Outlined.Restaurant, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text(
-                    text = "Take photo & analyze",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 12.dp)
+                    if (queryActive) "No matching foods" else "Your library is ready for its first food",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    if (queryActive) "Try a different name or create a manual entry."
+                    else "Foods you log will appear here for quick reuse.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
-@Composable
-private fun PortionPresetChips(currentGrams: String, onSelectGrams: (String) -> Unit) {
-    val presets = listOf("30", "50", "100", "150", "200", "250")
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        presets.forEach { preset ->
-            FilterChip(
-                selected = currentGrams == preset,
-                onClick = { onSelectGrams(preset) },
-                label = { Text("${preset} g") }
-            )
-        }
-    }
-}
-
-@Composable
-private fun BarcodeLookupCard(
-    state: BarcodeLookupUiState,
-    onBarcodeChange: (String) -> Unit,
-    onLookup: () -> Unit,
-    onScanBarcode: () -> Unit
-) {
-    SectionCard(title = "Barcode Lookup") {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(
-                value = state.barcode,
-                onValueChange = onBarcodeChange,
-                label = { Text("Barcode") },
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-            Surface(
-                onClick = onLookup,
-                enabled = !state.loading,
-                shape = RoundedCornerShape(999.dp),
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    if (state.loading) "Looking up..." else "Lookup product",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 12.dp)
-                )
-            }
-            OutlinedButton(
-                onClick = onScanBarcode,
-                shape = RoundedCornerShape(999.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Scan barcode with camera")
-            }
-            state.statusMessage?.let { message ->
-                Text(
-                    text = message,
-                    color = if (message.startsWith("Product found")) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            if (favorites.isNotEmpty()) {
+                FoodResultSection("Favorites", Icons.Outlined.Star) {
+                    favorites.forEach { favorite ->
+                        FoodChoiceRow(
+                            name = favorite.name,
+                            subtitle = favorite.brand ?: "Saved favorite",
+                            grams = favorite.servingSizeGrams,
+                            calories = favorite.nutritionPer100g.caloriesKcal * favorite.servingSizeGrams / 100.0,
+                            onClick = { onSelectFavoriteFood(favorite) }
+                        )
                     }
+                }
+            }
+            if (recent.isNotEmpty()) {
+                FoodResultSection(if (queryActive) "Matches" else "Recently logged", Icons.Outlined.History) {
+                    recent.distinctBy { it.name.lowercase() to it.brand.orEmpty().lowercase() }.take(8).forEach { entry ->
+                        FoodChoiceRow(
+                            name = entry.name,
+                            subtitle = entry.brand ?: entry.mealType.displayLabel(),
+                            grams = entry.grams,
+                            calories = entry.nutrition.caloriesKcal,
+                            onClick = { onSelectRecentFood(entry) }
+                        )
+                    }
+                }
+            }
+            if (custom.isNotEmpty()) {
+                FoodResultSection("Custom foods", Icons.Filled.EditNote) {
+                    custom.forEach { food ->
+                        FoodChoiceRow(
+                            name = food.name,
+                            subtitle = food.brand ?: "Custom food",
+                            grams = food.servingSizeGrams,
+                            calories = food.nutritionPer100g.caloriesKcal * food.servingSizeGrams / 100.0,
+                            onClick = { onSelectCustomFood(food) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FoodResultSection(
+    title: String,
+    icon: ImageVector,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    ModernCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(19.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+        content()
+    }
+}
+
+@Composable
+private fun FoodChoiceRow(
+    name: String,
+    subtitle: String,
+    grams: Double,
+    calories: Double,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("$subtitle · ${grams.formatPlain()} g", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text("${calories.roundToIntSafe()} kcal", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+private data class MacroValues(
+    val calories: Double,
+    val protein: Double,
+    val carbs: Double,
+    val fat: Double
+)
+
+@Composable
+private fun FoodEditorStage(
+    name: String,
+    onNameChange: (String) -> Unit,
+    brand: String,
+    onBrandChange: (String) -> Unit,
+    grams: String,
+    onGramsChange: (String) -> Unit,
+    calories: String,
+    onCaloriesChange: (String) -> Unit,
+    protein: String,
+    onProteinChange: (String) -> Unit,
+    carbs: String,
+    onCarbsChange: (String) -> Unit,
+    fat: String,
+    onFatChange: (String) -> Unit,
+    sugar: String,
+    onSugarChange: (String) -> Unit,
+    saturatedFat: String,
+    onSaturatedFatChange: (String) -> Unit,
+    fiber: String,
+    onFiberChange: (String) -> Unit,
+    salt: String,
+    onSaltChange: (String) -> Unit,
+    sodium: String,
+    onSodiumChange: (String) -> Unit,
+    notes: String,
+    onNotesChange: (String) -> Unit,
+    showNutritionDetails: Boolean,
+    onToggleNutritionDetails: () -> Unit,
+    showNotes: Boolean,
+    onToggleNotes: () -> Unit,
+    autoScaleNutrition: Boolean,
+    macroValues: MacroValues,
+    barcodeLookup: BarcodeLookupUiState,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val wide = maxWidth >= 700.dp
+        if (wide) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                ScrollPane(modifier = Modifier.weight(0.48f).fillMaxHeight()) {
+                    barcodeLookup.statusMessage?.let {
+                        InlineStatus(message = it, kind = barcodeLookup.status.toInlineStatusKind())
+                    }
+                    EditorEssentials(
+                        name = name,
+                        onNameChange = onNameChange,
+                        grams = grams,
+                        onGramsChange = onGramsChange
+                    )
+                }
+                ScrollPane(modifier = Modifier.weight(0.52f).fillMaxHeight()) {
+                    barcodeLookup.saveError?.let { InlineStatus(it, InlineStatusKind.Error) }
+                    EditorNutrition(
+                        grams = grams,
+                        calories = calories,
+                        onCaloriesChange = onCaloriesChange,
+                        protein = protein,
+                        onProteinChange = onProteinChange,
+                        carbs = carbs,
+                        onCarbsChange = onCarbsChange,
+                        fat = fat,
+                        onFatChange = onFatChange,
+                        sugar = sugar,
+                        onSugarChange = onSugarChange,
+                        saturatedFat = saturatedFat,
+                        onSaturatedFatChange = onSaturatedFatChange,
+                        fiber = fiber,
+                        onFiberChange = onFiberChange,
+                        salt = salt,
+                        onSaltChange = onSaltChange,
+                        sodium = sodium,
+                        onSodiumChange = onSodiumChange,
+                        showNutritionDetails = showNutritionDetails,
+                        onToggleNutritionDetails = onToggleNutritionDetails
+                    )
+                    EditorOptionalDetails(
+                        brand = brand,
+                        onBrandChange = onBrandChange,
+                        notes = notes,
+                        onNotesChange = onNotesChange,
+                        expanded = showNotes,
+                        onToggle = onToggleNotes
+                    )
+                    CompactLiveSummary(
+                        macroValues = macroValues,
+                        autoScaleNutrition = autoScaleNutrition,
+                        compact = true
+                    )
+                }
+            }
+        } else {
+            ScrollPane(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                barcodeLookup.statusMessage?.let {
+                    InlineStatus(message = it, kind = barcodeLookup.status.toInlineStatusKind())
+                }
+                barcodeLookup.saveError?.let { InlineStatus(it, InlineStatusKind.Error) }
+                EditorEssentials(
+                    name = name,
+                    onNameChange = onNameChange,
+                    grams = grams,
+                    onGramsChange = onGramsChange
                 )
+                EditorNutrition(
+                    grams = grams,
+                    calories = calories,
+                    onCaloriesChange = onCaloriesChange,
+                    protein = protein,
+                    onProteinChange = onProteinChange,
+                    carbs = carbs,
+                    onCarbsChange = onCarbsChange,
+                    fat = fat,
+                    onFatChange = onFatChange,
+                    sugar = sugar,
+                    onSugarChange = onSugarChange,
+                    saturatedFat = saturatedFat,
+                    onSaturatedFatChange = onSaturatedFatChange,
+                    fiber = fiber,
+                    onFiberChange = onFiberChange,
+                    salt = salt,
+                    onSaltChange = onSaltChange,
+                    sodium = sodium,
+                    onSodiumChange = onSodiumChange,
+                    showNutritionDetails = showNutritionDetails,
+                    onToggleNutritionDetails = onToggleNutritionDetails
+                )
+                EditorOptionalDetails(
+                    brand = brand,
+                    onBrandChange = onBrandChange,
+                    notes = notes,
+                    onNotesChange = onNotesChange,
+                    expanded = showNotes,
+                    onToggle = onToggleNotes
+                )
+                CompactLiveSummary(
+                    macroValues = macroValues,
+                    autoScaleNutrition = autoScaleNutrition
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactLiveSummary(
+    macroValues: MacroValues,
+    autoScaleNutrition: Boolean,
+    compact: Boolean = false
+) {
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f),
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = if (compact) 11.dp else 13.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text("ENTRY TOTAL", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${macroValues.calories.coerceAtLeast(0.0).roundToIntSafe()} kcal",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CompactMacroValue("Protein", macroValues.protein)
+                    CompactMacroValue("Carbs", macroValues.carbs)
+                    CompactMacroValue("Fat", macroValues.fat)
+                }
+            }
+            if (autoScaleNutrition) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        "Values scale with the portion until a nutrient is edited.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                        maxLines = if (compact) 1 else 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactMacroValue(label: String, value: Double) {
+    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
+            maxLines = 2
+        )
+        Text("${value.coerceAtLeast(0.0).roundToIntSafe()} g", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun EditorEssentials(
+    name: String,
+    onNameChange: (String) -> Unit,
+    grams: String,
+    onGramsChange: (String) -> Unit
+) {
+    var nameTouched by rememberSaveable { mutableStateOf(false) }
+    SectionCard(title = "Food & portion", subtitle = "What are you logging right now?") {
+        OutlinedTextField(
+            value = name,
+            onValueChange = {
+                nameTouched = true
+                onNameChange(it)
+            },
+            label = { Text("Food name *") },
+            singleLine = true,
+            isError = nameTouched && name.isBlank(),
+            supportingText = if (nameTouched && name.isBlank()) ({ Text("Enter a food name") }) else null,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier.fillMaxWidth().testTag("food_name_input")
+        )
+        NumericField(
+            value = grams,
+            onValueChange = onGramsChange,
+            label = "Portion *",
+            suffix = "g",
+            requiredPositive = true,
+            modifier = Modifier.testTag("food_grams_input")
+        )
+    }
+}
+
+@Composable
+private fun EditorNutrition(
+    grams: String,
+    calories: String,
+    onCaloriesChange: (String) -> Unit,
+    protein: String,
+    onProteinChange: (String) -> Unit,
+    carbs: String,
+    onCarbsChange: (String) -> Unit,
+    fat: String,
+    onFatChange: (String) -> Unit,
+    sugar: String,
+    onSugarChange: (String) -> Unit,
+    saturatedFat: String,
+    onSaturatedFatChange: (String) -> Unit,
+    fiber: String,
+    onFiberChange: (String) -> Unit,
+    salt: String,
+    onSaltChange: (String) -> Unit,
+    sodium: String,
+    onSodiumChange: (String) -> Unit,
+    showNutritionDetails: Boolean,
+    onToggleNutritionDetails: () -> Unit
+) {
+    SectionCard(
+        title = "Nutrition",
+        subtitle = "Totals for ${grams.ifBlank { "this portion" }}${if (grams.isBlank()) "" else " g"}."
+    ) {
+        ResponsiveFieldPair(
+            first = { NumericField(calories, onCaloriesChange, "Energy", suffix = "kcal") },
+            second = { NumericField(protein, onProteinChange, "Protein", suffix = "g") }
+        )
+        ResponsiveFieldPair(
+            first = { NumericField(carbs, onCarbsChange, "Carbs", suffix = "g") },
+            second = { NumericField(fat, onFatChange, "Fat", suffix = "g") }
+        )
+        Surface(
+            onClick = onToggleNutritionDetails,
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text("More nutrients", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Sugar, saturated fat, fiber, salt and sodium",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Icon(
+                    if (showNutritionDetails) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (showNutritionDetails) "Hide more nutrients" else "Show more nutrients"
+                )
+            }
+        }
+        AnimatedVisibility(visible = showNutritionDetails) {
+            Column(
+                modifier = Modifier.padding(top = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ResponsiveFieldPair(
+                    first = { NumericField(sugar, onSugarChange, "Sugar", suffix = "g") },
+                    second = { NumericField(saturatedFat, onSaturatedFatChange, "Saturated fat", suffix = "g") }
+                )
+                ResponsiveFieldPair(
+                    first = { NumericField(fiber, onFiberChange, "Fiber", suffix = "g") },
+                    second = { NumericField(salt, onSaltChange, "Salt", suffix = "g") }
+                )
+                NumericField(sodium, onSodiumChange, "Sodium", suffix = "mg")
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditorOptionalDetails(
+    brand: String,
+    onBrandChange: (String) -> Unit,
+    notes: String,
+    onNotesChange: (String) -> Unit,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    ModernCard(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Surface(
+            onClick = onToggle,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 2.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text("Brand & note", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (expanded) "Optional details are open" else "Add optional context",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (expanded) "Hide brand and note" else "Show brand and note"
+                )
+            }
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                modifier = Modifier.padding(top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = brand,
+                    onValueChange = onBrandChange,
+                    label = { Text("Brand (optional)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = onNotesChange,
+                    label = { Text("Note (optional)") },
+                    minLines = 2,
+                    maxLines = 4,
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResponsiveFieldPair(
+    first: @Composable () -> Unit,
+    second: @Composable () -> Unit
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth < 280.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                first()
+                second()
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f)) { first() }
+                Box(Modifier.weight(1f)) { second() }
             }
         }
     }
@@ -351,19 +1220,90 @@ private fun NumericField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    suffix: String? = null,
+    requiredPositive: Boolean = false
 ) {
+    val parsed = value.toUserDecimalOrNull()
+    val invalid = if (requiredPositive) {
+        value.isNotBlank() && parsed?.let { it <= 0.0 } != false
+    } else {
+        value.isNotBlank() && parsed?.let { it < 0.0 } != false
+    }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        shape = RoundedCornerShape(16.dp),
+        suffix = suffix?.let { { Text(it) } },
+        isError = invalid,
+        supportingText = if (invalid) {
+            { Text(if (requiredPositive) "Enter an amount above zero" else "Enter zero or a positive number") }
+        } else {
+            null
+        },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+        singleLine = true,
+        shape = RoundedCornerShape(18.dp),
         modifier = modifier.fillMaxWidth()
     )
 }
 
+private fun BarcodeLookupStatus.toInlineStatusKind(): InlineStatusKind = when (this) {
+    BarcodeLookupStatus.Idle, BarcodeLookupStatus.Loading -> InlineStatusKind.Info
+    BarcodeLookupStatus.Success -> InlineStatusKind.Success
+    BarcodeLookupStatus.Error -> InlineStatusKind.Error
+}
+
+private fun String.scaledBy(factor: Double): String {
+    val value = toUserDecimalOrNull() ?: return this
+    return (value * factor).formatPlain()
+}
+
+private fun Micronutrients.scaledBy(factor: Double): Micronutrients = Micronutrients(
+    values = values.mapValues { (_, value) -> value.copy(amount = value.amount * factor) }
+)
+
+private val MicronutrientsSaver = listSaver<Micronutrients, String>(
+    save = { micronutrients ->
+        micronutrients.values.map { (key, value) ->
+            listOf(
+                key.name,
+                value.amount.toString(),
+                value.dataQuality.name,
+                URLEncoder.encode(value.source.orEmpty(), StandardCharsets.UTF_8.name())
+            ).joinToString("\t")
+        }
+    },
+    restore = { saved ->
+        Micronutrients(
+            values = saved.mapNotNull { encoded ->
+                val parts = encoded.split('\t', limit = 4)
+                val key = parts.getOrNull(0)?.let { value ->
+                    NutrientKey.entries.firstOrNull { it.name == value }
+                }
+                val amount = parts.getOrNull(1)?.toDoubleOrNull()
+                val quality = parts.getOrNull(2)?.let { value ->
+                    DataQuality.entries.firstOrNull { it.name == value }
+                }
+                if (key == null || amount == null || quality == null) {
+                    null
+                } else {
+                    key to MicronutrientValue(
+                        amount = amount,
+                        dataQuality = quality,
+                        source = parts.getOrNull(3)
+                            ?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) }
+                            ?.ifBlank { null }
+                    )
+                }
+            }.toMap()
+        )
+    }
+)
+
 private fun Double.formatPlain(): String {
-    val rounded = kotlin.math.round(this * 10.0) / 10.0
+    val rounded = round(this * 10.0) / 10.0
     return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
 }
+
+private fun Double.roundToIntSafe(): Int = if (isFinite()) roundToInt() else 0

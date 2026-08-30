@@ -2,10 +2,14 @@ package com.raysix.fitns.feature.onboarding
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,19 +32,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.raysix.fitns.core.design.AdaptiveTwoColumn
+import com.raysix.fitns.R
 import com.raysix.fitns.core.design.ActivityLevelSelector
+import com.raysix.fitns.core.design.AdaptiveTwoColumn
 import com.raysix.fitns.core.design.BiologicalSexDropdown
+import com.raysix.fitns.core.design.BrandGradientViolet
+import com.raysix.fitns.core.design.BrandGradient
 import com.raysix.fitns.core.design.ErrorBanner
-import com.raysix.fitns.core.design.ScreenHeader
-import com.raysix.fitns.core.design.SectionCard
 import com.raysix.fitns.core.design.FitnessGoalSelector
+import com.raysix.fitns.core.design.GradientHeroCard
+import com.raysix.fitns.core.design.OceanBackdrop
+import com.raysix.fitns.core.design.SectionCard
+import com.raysix.fitns.core.design.WhaleTailMark
+import com.raysix.fitns.core.design.isCompactHeight
 import com.raysix.fitns.core.input.toUserDecimalOrNull
 import com.raysix.fitns.domain.model.UserProfile
 import com.raysix.fitns.domain.usecase.NutritionGoalEstimator
@@ -54,13 +66,9 @@ fun OnboardingScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState.onboardingCompleted) {
-        if (uiState.onboardingCompleted == true) {
-            onDone()
-        }
+        if (uiState.onboardingCompleted == true) onDone()
     }
-    if (uiState.onboardingCompleted != false) {
-        return
-    }
+    if (uiState.onboardingCompleted != false) return
 
     var age by rememberSaveable { mutableStateOf("") }
     var physiology by rememberSaveable { mutableStateOf("") }
@@ -95,8 +103,12 @@ fun OnboardingScreen(
         goal = goalName.ifBlank { "Maintain" },
         activityLevel = activity.ifBlank { "Moderate" }
     )
+    val parsedAge = age.toIntOrNull()
+    val parsedTrainingDays = trainingDays.toIntOrNull()
+    val ageIsValid = age.isBlank() || parsedAge?.let { it in 1..120 } == true
+    val trainingDaysAreValid = parsedTrainingDays?.let { it in 0..7 } == true
     val canSaveProfile = weight.toUserDecimalOrNull()?.let { it in 20.0..500.0 } == true &&
-        activity.isNotBlank() && goalName.isNotBlank()
+        ageIsValid && trainingDaysAreValid && activity.isNotBlank() && goalName.isNotBlank()
 
     val signInLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -107,163 +119,315 @@ fun OnboardingScreen(
             viewModel.setSignInError("Google sign-in failed. Please try again.")
         }
     }
+    val compactHeight = isCompactHeight()
 
-    AdaptiveTwoColumn(
-        header = {
-            ScreenHeader(
-                title = "Welcome to FitNS",
-                subtitle = "Set up your profile so nutrition and workout targets match your goal."
-            )
-        },
-        main = {
-            if (!profileSetupStarted) {
-                SectionCard(
-                    title = "Continue with an account",
-                    subtitle = "Sign in or create a local FitNS profile."
-                ) {
-                    val googleAccount = uiState.googleAccount
-                    if (googleAccount == null) {
-                        Surface(
-                            onClick = {
-                                val intent = viewModel.createSignInIntent()
-                                if (intent != null) {
-                                    signInLauncher.launch(intent)
-                                } else {
-                                    viewModel.setSignInError(
-                                        "Google sign-in is not configured yet. Add GOOGLE_WEB_CLIENT_ID to local.properties and rebuild."
+    OceanBackdrop {
+        AdaptiveTwoColumn(
+            header = {
+                OnboardingHero(
+                    profileSetupStarted = profileSetupStarted,
+                    compactHeight = compactHeight
+                )
+            },
+            main = {
+                if (!profileSetupStarted) {
+                    SectionCard(
+                        title = "Choose how to begin",
+                        subtitle = "Use an account or keep your profile on this device."
+                    ) {
+                        if (uiState.googleAccount == null) {
+                            Surface(
+                                onClick = {
+                                    val intent = viewModel.createSignInIntent()
+                                    if (intent != null) {
+                                        signInLauncher.launch(intent)
+                                    } else {
+                                        viewModel.setSignInError(
+                                            "Google sign-in is not configured yet. Add GOOGLE_WEB_CLIENT_ID to local.properties and rebuild."
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Row(
+                                    Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = GoogleGLogo,
+                                        contentDescription = null,
+                                        tint = Color.Unspecified,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        "Continue with Google",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(start = 10.dp)
                                     )
                                 }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(999.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ) {
-                            Row(
-                                Modifier.padding(vertical = 13.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = GoogleGLogo,
-                                    contentDescription = null,
-                                    tint = Color.Unspecified,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    text = "Continue with Google",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(start = 10.dp)
-                                )
                             }
                         }
+                        uiState.signInError?.let {
+                            Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
+                        }
+                        Text(
+                            "OR USE THIS DEVICE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OnboardingActionButton(
+                            text = "Create a local profile",
+                            onClick = { profileSetupStarted = true }
+                        )
+                        Text(
+                            "Your local profile remains available offline and follows your configured sync settings.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    uiState.signInError?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
+                } else {
+                    SectionCard(
+                        title = "Your baseline",
+                        subtitle = "These inputs calculate your first nutrition targets."
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                            ResponsiveFieldPair(
+                                first = { modifier -> IntegerField(age, { age = it }, "Age", 3, modifier) },
+                                second = { modifier -> IntegerField(trainingDays, { trainingDays = it }, "Training days", 1, modifier) }
+                            )
+                            BiologicalSexDropdown(
+                                value = physiology,
+                                onValueChange = { physiology = it },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            ResponsiveFieldPair(
+                                first = { modifier -> NumericField(height, { height = it }, "Height cm", modifier) },
+                                second = { modifier -> NumericField(weight, { weight = it }, "Weight kg", modifier) }
+                            )
+                            NumericField(targetWeight, { targetWeight = it }, "Target weight kg")
+                            ActivityLevelSelector(selected = activity, onSelected = { activity = it })
+                            FitnessGoalSelector(selected = goalName, onSelected = { goalName = it })
+                        }
                     }
-                }
-                SectionCard(
-                    title = "Create a FitNS profile",
-                    subtitle = "No account required. Your profile is saved locally and queued for your configured n8n sync."
-                ) {
+                    uiState.errorMessage?.let { ErrorBanner(it) }
                     OnboardingActionButton(
-                        text = "Create profile",
-                        onClick = { profileSetupStarted = true }
+                        text = if (uiState.saving) "Saving…" else "Create profile",
+                        enabled = canSaveProfile && !uiState.saving,
+                        onClick = {
+                            viewModel.save(
+                                profile = UserProfile(
+                                    age = parsedAge,
+                                    sexOrPhysiology = physiology.ifBlank { null },
+                                    heightCm = height.toUserDecimalOrNull(),
+                                    weightKg = weight.toUserDecimalOrNull(),
+                                    targetWeightKg = targetWeight.toUserDecimalOrNull(),
+                                    activityLevel = activity.ifBlank { "Moderate" },
+                                    trainingDaysPerWeek = parsedTrainingDays ?: 0,
+                                    goal = goalName.ifBlank { "Maintain" }
+                                ),
+                                goal = estimatedGoal,
+                                onComplete = onDone
+                            )
+                        }
                     )
+                    if (!canSaveProfile) {
+                        Text(
+                            "Use a valid weight, age (if entered), and 0–7 training days, then choose your activity level and goal.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
-            } else {
-                SectionCard(title = "Your profile", subtitle = "These inputs calculate your first nutrition targets automatically.") {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            NumericField(age, { age = it }, "Age", Modifier.weight(1f))
-                            NumericField(trainingDays, { trainingDays = it }, "Training days", Modifier.weight(1f))
-                        }
-                        BiologicalSexDropdown(
-                            value = physiology,
-                            onValueChange = { physiology = it },
-                            modifier = Modifier.fillMaxWidth()
+            },
+            side = {
+                if (!profileSetupStarted) {
+                    SectionCard(
+                        title = "A useful starting point",
+                        subtitle = "Enough structure to guide you, with room to adjust."
+                    ) {
+                        BenefitRow(
+                            number = "01",
+                            title = "Targets with context",
+                            detail = "Calories, macros, fiber, and water begin from your current profile."
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            NumericField(height, { height = it }, "Height cm", Modifier.weight(1f))
-                            NumericField(weight, { weight = it }, "Weight kg", Modifier.weight(1f))
-                        }
-                        NumericField(targetWeight, { targetWeight = it }, "Target weight kg")
-                        ActivityLevelSelector(
-                            selected = activity,
-                            onSelected = { activity = it }
+                        BenefitRow(
+                            number = "02",
+                            title = "Built to adapt",
+                            detail = "Change every target later as your routine or priorities evolve."
                         )
-                        FitnessGoalSelector(
-                            selected = goalName,
-                            onSelected = { goalName = it }
+                        BenefitRow(
+                            number = "03",
+                            title = "One calm overview",
+                            detail = "Food, hydration, and training stay connected on your dashboard."
+                        )
+                    }
+                    OnboardingMotivationCard()
+                } else {
+                    SectionCard(
+                        title = "Calculated targets",
+                        subtitle = "Updated live from your profile inputs."
+                    ) {
+                        GoalSummaryRow("Calories", "${estimatedGoal.caloriesKcal.formatPlain()} kcal")
+                        GoalSummaryRow("Protein", "${estimatedGoal.proteinGrams.formatPlain()} g")
+                        GoalSummaryRow("Carbs", "${estimatedGoal.carbohydrateGrams.formatPlain()} g")
+                        GoalSummaryRow("Fat", "${estimatedGoal.fatGrams.formatPlain()} g")
+                        GoalSummaryRow("Fiber", "${estimatedGoal.fiberGrams.formatPlain()} g")
+                        GoalSummaryRow("Water", "${estimatedGoal.waterMilliliters.formatPlain()} ml")
+                        Text(
+                            "These are starting values. Change them anytime in Settings → Nutrition goals.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
-        },
-        side = {
-            if (!profileSetupStarted) {
-                SectionCard(title = "Personalized from the start") {
-                    Text("FitNS uses your weight, activity level, and goal to calculate your initial calorie, macro, fiber, and water targets.")
-                    Text(
-                        "You can fine-tune every nutrition target later in Settings.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                SectionCard(
-                    title = "Calculated nutrition targets",
-                    subtitle = "Updated automatically from your profile inputs."
-                ) {
-                    GoalSummaryRow("Calories", "${estimatedGoal.caloriesKcal.formatPlain()} kcal")
-                    GoalSummaryRow("Protein", "${estimatedGoal.proteinGrams.formatPlain()} g")
-                    GoalSummaryRow("Carbohydrates", "${estimatedGoal.carbohydrateGrams.formatPlain()} g")
-                    GoalSummaryRow("Fat", "${estimatedGoal.fatGrams.formatPlain()} g")
-                    GoalSummaryRow("Fiber", "${estimatedGoal.fiberGrams.formatPlain()} g")
-                    GoalSummaryRow("Water", "${estimatedGoal.waterMilliliters.formatPlain()} ml")
-                    Text(
-                        "These are starting values. Change them anytime in Settings → Nutrition goals.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                uiState.errorMessage?.let { ErrorBanner(it) }
-                OnboardingActionButton(
-                    text = if (uiState.saving) "Saving..." else "Create profile",
-                    enabled = canSaveProfile && !uiState.saving,
-                    onClick = {
-                        viewModel.save(
-                            profile = UserProfile(
-                                age = age.toIntOrNull(),
-                                sexOrPhysiology = physiology.ifBlank { null },
-                                heightCm = height.toUserDecimalOrNull(),
-                                weightKg = weight.toUserDecimalOrNull(),
-                                targetWeightKg = targetWeight.toUserDecimalOrNull(),
-                                activityLevel = activity.ifBlank { "Moderate" },
-                                trainingDaysPerWeek = trainingDays.toIntOrNull() ?: 0,
-                                goal = goalName.ifBlank { "Maintain" }
-                            ),
-                            goal = estimatedGoal,
-                            onComplete = onDone
-                        )
-                    }
+        )
+    }
+}
+
+@Composable
+private fun OnboardingMotivationCard() {
+    val onHero = MaterialTheme.colorScheme.onPrimary
+    GradientHeroCard(brush = BrandGradient, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Text(
+                    "YOUR STRENGTH RUNS DEEP",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = onHero.copy(alpha = 0.78f)
                 )
-                if (!canSaveProfile) {
+                Text(
+                    "Small choices. Powerful current.",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = onHero
+                )
+                Text(
+                    "FitNS turns today's effort into a clear next step tomorrow.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = onHero.copy(alpha = 0.86f)
+                )
+            }
+            WhaleTailMark(
+                modifier = Modifier.size(58.dp),
+                tint = onHero.copy(alpha = 0.88f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun OnboardingHero(profileSetupStarted: Boolean, compactHeight: Boolean) {
+    val onHero = MaterialTheme.colorScheme.onPrimary
+    GradientHeroCard(brush = BrandGradientViolet, modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(if (compactHeight) 4.dp else 7.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    WhaleTailMark(Modifier.size(25.dp), tint = onHero.copy(alpha = 0.9f))
                     Text(
-                        "Enter a valid body weight and choose an activity level and goal to continue.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+                        if (profileSetupStarted) "PROFILE SETUP" else "BLUE WHALE SYSTEM",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = onHero.copy(alpha = 0.82f),
+                        modifier = Modifier.padding(start = 8.dp)
                     )
                 }
+                Text(
+                    if (profileSetupStarted) "Set your course" else "Build your baseline",
+                    style = if (compactHeight) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = onHero
+                )
+                Text(
+                    if (profileSetupStarted) {
+                        "A few details turn broad guidance into targets that fit."
+                    } else {
+                        "Start with a clear plan for nutrition, hydration, and training."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = onHero.copy(alpha = 0.9f)
+                )
+            }
+            Image(
+                painter = painterResource(R.drawable.whale_coach),
+                contentDescription = null,
+                modifier = Modifier.padding(start = 10.dp).size(if (compactHeight) 72.dp else 94.dp),
+                contentScale = ContentScale.Fit
+            )
+        }
+    }
+}
+
+@Composable
+private fun BenefitRow(number: String, title: String, detail: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ) {
+            Text(
+                number,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp)
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ResponsiveFieldPair(
+    first: @Composable (Modifier) -> Unit,
+    second: @Composable (Modifier) -> Unit
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth < 310.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                first(Modifier.fillMaxWidth())
+                second(Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                first(Modifier.weight(1f))
+                second(Modifier.weight(1f))
             }
         }
-    )
+    }
 }
 
 @Composable
 private fun GoalSummaryRow(label: String, value: String) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -281,17 +445,17 @@ private fun OnboardingActionButton(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(999.dp),
-        color = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary
+        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(vertical = 14.dp)
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 15.dp)
         )
     }
 }
@@ -308,14 +472,35 @@ private fun NumericField(
         onValueChange = onValueChange,
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         modifier = modifier.fillMaxWidth()
     )
 }
 
-private fun Double.formatPlain(): String {
-    return if (this % 1.0 == 0.0) toInt().toString() else toString()
+@Composable
+private fun IntegerField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    maxDigits: Int,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { candidate ->
+            if (candidate.length <= maxDigits && candidate.all(Char::isDigit)) {
+                onValueChange(candidate)
+            }
+        },
+        label = { Text(label) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp),
+        modifier = modifier.fillMaxWidth()
+    )
 }
+
+private fun Double.formatPlain(): String = if (this % 1.0 == 0.0) toInt().toString() else toString()
 
 private val GoogleGLogo: ImageVector by lazy {
     ImageVector.Builder(
