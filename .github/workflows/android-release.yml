@@ -170,7 +170,7 @@ jobs:
             fi
             certificate_digest="$(
               printf '%s\n' "${verification_output}" |
-                awk -F ': ' '/Signer #1 certificate SHA-256 digest:/ { print tolower($2); exit }'
+                awk '/Signer #1 certificate SHA-256 digest:/ { gsub(/:/, "", $NF); print tolower($NF); exit }'
             )"
             if [[ ! "${certificate_digest}" =~ ^[0-9a-f]{64}$ ]]; then
               echo "::error::Could not read the APK signing certificate for ${apk##*/}."
