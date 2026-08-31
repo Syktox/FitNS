@@ -137,6 +137,7 @@ fun OnboardingScreen(
                     ) {
                         if (uiState.googleAccount == null) {
                             Surface(
+                                enabled = viewModel.isGoogleConfigured,
                                 onClick = {
                                     val intent = viewModel.createSignInIntent()
                                     if (intent != null) {
@@ -165,7 +166,11 @@ fun OnboardingScreen(
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Text(
-                                        "Continue with Google",
+                                        if (viewModel.isGoogleConfigured) {
+                                            "Continue with Google"
+                                        } else {
+                                            "Google sign-in coming soon"
+                                        },
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.SemiBold,
                                         modifier = Modifier.padding(start = 10.dp)
