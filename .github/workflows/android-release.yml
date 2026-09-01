@@ -160,6 +160,19 @@ jobs:
             exit 1
           fi
 
+          extract_certificate_digest() {
+            awk '
+              /[Ss][Hh][Aa](-|[[:space:]])?256([[:space:]]+digest)?:/ {
+                sub(/^[^:]*:/, "")
+                gsub(/[^[:xdigit:]]/, "")
+                if (length($0) == 64) {
+                  print tolower($0)
+                  exit
+                }
+              }
+            '
+          }
+
           expected_certificate_digest=""
           for apk in "${apks[@]}"; do
             if ! verification_output="$(
@@ -170,12 +183,7 @@ jobs:
             fi
             certificate_digest="$(
               printf '%s\n' "${verification_output}" |
-                awk '/Signer #1 certificate SHA-256 digest:/ {
-                  sub(/^.*Signer #1 certificate SHA-256 digest:[[:space:]]*/, "")
-                  gsub(/[^[:xdigit:]]/, "")
-                  print tolower($0)
-                  exit
-                }'
+                extract_certificate_digest
             )"
             if [[ ! "${certificate_digest}" =~ ^[0-9a-f]{64}$ ]]; then
               echo "::error::Could not read the APK signing certificate for ${apk##*/}."
@@ -207,7 +215,7 @@ jobs:
             fi
             certificate_digest="$(
               printf '%s\n' "${certificate_output}" |
-                awk -F 'SHA256:' '/^[[:space:]]*SHA256:/ { value=$2; gsub(/[:[:space:]]/, "", value); print tolower(value); exit }'
+                extract_certificate_digest
             )"
             if [[ ! "${certificate_digest}" =~ ^[0-9a-f]{64}$ ]]; then
               echo "::error::Could not read the AAB signing certificate digest for ${bundle##*/}."
