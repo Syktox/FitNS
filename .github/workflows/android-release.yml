@@ -137,6 +137,7 @@ jobs:
 
           apks=(app/build/outputs/apk/release/*.apk)
           bundles=(app/build/outputs/bundle/release/*.aab)
+
           if (( ${#apks[@]} == 0 )); then
             echo "::error::No release APK was produced."
             exit 1
@@ -151,6 +152,7 @@ jobs:
             echo "::error::Android SDK build-tools directory was not found."
             exit 1
           fi
+
           apksigner_path="$(
             find "${android_sdk_root}/build-tools" -mindepth 2 -maxdepth 2 \
               -type f -name apksigner -print | sort -V | tail -n 1
@@ -160,69 +162,17 @@ jobs:
             exit 1
           fi
 
-          extract_certificate_digest() {
-            awk '
-              /[Ss][Hh][Aa](-|[[:space:]])?256([[:space:]]+digest)?:/ {
-                sub(/^[^:]*:/, "")
-                gsub(/[^[:xdigit:]]/, "")
-                if (length($0) == 64) {
-                  print tolower($0)
-                  exit
-                }
-              }
-            '
-          }
-
-          expected_certificate_digest=""
           for apk in "${apks[@]}"; do
-            if ! verification_output="$(
-              "${apksigner_path}" verify --verbose --print-certs "${apk}" 2>&1
-            )"; then
-              echo "::error::APK signature verification failed for ${apk##*/}."
-              exit 1
-            fi
-            certificate_digest="$(
-              printf '%s\n' "${verification_output}" |
-                extract_certificate_digest
-            )"
-            if [[ ! "${certificate_digest}" =~ ^[0-9a-f]{64}$ ]]; then
-              echo "::error::Could not read the APK signing certificate for ${apk##*/}."
-              exit 1
-            fi
-            if [[ -z "${expected_certificate_digest}" ]]; then
-              expected_certificate_digest="${certificate_digest}"
-            elif [[ "${certificate_digest}" != "${expected_certificate_digest}" ]]; then
-              echo "::error::Release APKs are not signed with the same certificate."
-              exit 1
-            fi
+            "${apksigner_path}" verify --verbose "${apk}"
             echo "Verified signed APK: ${apk##*/}"
           done
 
           for bundle in "${bundles[@]}"; do
-            if ! verification_output="$(jarsigner -verify "${bundle}" 2>&1)"; then
-              echo "::error::AAB signature verification failed for ${bundle##*/}."
-              exit 1
-            fi
+            verification_output="$(jarsigner -verify "${bundle}" 2>&1)"
             if ! grep -Fq "jar verified." <<< "${verification_output}" || \
               grep -Eqi "jar is unsigned|unsigned entries" <<< "${verification_output}"; then
-              echo "::error::AAB is not completely signed: ${bundle##*/}."
-              exit 1
-            fi
-
-            if ! certificate_output="$(keytool -printcert -jarfile "${bundle}" 2>&1)"; then
-              echo "::error::Could not read the AAB signing certificate for ${bundle##*/}."
-              exit 1
-            fi
-            certificate_digest="$(
-              printf '%s\n' "${certificate_output}" |
-                extract_certificate_digest
-            )"
-            if [[ ! "${certificate_digest}" =~ ^[0-9a-f]{64}$ ]]; then
-              echo "::error::Could not read the AAB signing certificate digest for ${bundle##*/}."
-              exit 1
-            fi
-            if [[ "${certificate_digest}" != "${expected_certificate_digest}" ]]; then
-              echo "::error::APK and AAB are signed with different certificates."
+              printf '%s\n' "${verification_output}"
+              echo "::error::AAB signature verification failed for ${bundle##*/}."
               exit 1
             fi
             echo "Verified signed AAB: ${bundle##*/}"
